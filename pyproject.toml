@@ -1,0 +1,8 @@
+[project]
+name = "ai-loan"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.136.0",
+    "uvicorn>=0.44.0",
+]
