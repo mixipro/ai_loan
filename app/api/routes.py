@@ -6,6 +6,7 @@ from app.services.orchestrator import run_pipeline
 
 router = APIRouter()
 
+
 @router.post("/analyze")
 def analyze(user: UserInput):
     return run_pipeline(user)

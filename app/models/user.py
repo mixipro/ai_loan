@@ -43,7 +43,7 @@ CITIES_BY_COUNTRY: dict[str, list[str]] = {
         "Albuquerque", "Tucson", "Fresno", "Sacramento", "Kansas City",
         "Mesa", "Atlanta", "Omaha", "Colorado Springs", "Raleigh",
         "Long Beach", "Virginia Beach", "Minneapolis", "Tampa", "New Orleans",
-        "Arlington", "Bakersfield", "Honolulu", "Anaheim", "Aurora",
+        "Arlington", "Bakersfield", "Honolulu", "Anaheim", "Aurora", "Miami",
     ],
     "DE": [
         "Berlin", "Hamburg", "Munich", "Cologne", "Frankfurt",
@@ -523,10 +523,6 @@ class Profession(str, Enum):
     BARTENDER = "Bartender"
 
 
-class ProfessionalInfo(BaseModel):
-    sector: Sector
-    profession: Profession
-
 class EmploymentStatus(str, Enum):
     FULL_TIME     = "full-time"
     PART_TIME     = "part-time"
@@ -535,6 +531,11 @@ class EmploymentStatus(str, Enum):
     UNEMPLOYED    = "unemployed"
     STUDENT       = "student"
     RETIRED       = "retired"
+
+class ProfessionalInfo(BaseModel):
+    sector: Sector
+    profession: Profession
+    employment_status: EmploymentStatus
 
 
 
@@ -591,27 +592,27 @@ class UserInput(BaseModel):
 # ─────────────────────────────────────────
 # 🧪 PRIMER VALIDNOG UNOSA
 # ─────────────────────────────────────────
-
-EXAMPLE = UserInput(
-    personal=PersonalInfo(age=32),
-    location=LocationInfo(country=Country.SERBIA, city="Belgrade"),
-    financial=FinancialInfo(
-        income=2500,
-        expenses=1800,
-        debt=5000,
-        savings=12000,
-        currency=Currency.EUR,
-    ),
-    professional=ProfessionalInfo(
-        sector=Sector.TECHNOLOGY,
-        onet_code="15-1252.00",
-        profession_title="Software Developers",
-        skills=["Python", "FastAPI", "PostgreSQL"],
-        employment_status=EmploymentStatus.FULL_TIME,
-        years_at_job=4,
-    ),
-    preferences=Preferences(
-        risk_profile=RiskProfile.MEDIUM,
-        horizon=HorizonGroup.MEDIUM,
-    ),
-)
+#
+# EXAMPLE = UserInput(
+#     personal=PersonalInfo(age=32),
+#     location=LocationInfo(country=Country.SERBIA, city="Belgrade"),
+#     financial=FinancialInfo(
+#         income=2500,
+#         expenses=1800,
+#         debt=5000,
+#         savings=12000,
+#         currency=Currency.EUR,
+#     ),
+#     professional=ProfessionalInfo(
+#         sector=Sector.TECHNOLOGY,
+#         onet_code="15-1252.00",
+#         profession_title="Software Developers",
+#         skills=["Python", "FastAPI", "PostgreSQL"],
+#         employment_status=EmploymentStatus.FULL_TIME,
+#         years_at_job=4,
+#     ),
+#     preferences=Preferences(
+#         risk_profile=RiskProfile.MEDIUM,
+#         horizon=HorizonGroup.MEDIUM,
+#     ),
+# )
