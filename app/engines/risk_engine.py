@@ -69,12 +69,16 @@ def calculate_risk_score(user: UserInput) -> dict:
     # ─────────────────────────
     age = user.personal.age
 
-    if 25 <= age <= 55:
+    if age < 22:
+        score -= 2
+    elif 22 <= age <= 24:
+        score += 0
+    elif 25 <= age <= 55:
         score += 2
     elif 56 <= age <= 64:
         score += 1
-    else:
-        score += 0
+    elif age > 65:
+        score -= 2
 
     # ─────────────────────────
     # 🌍 COUNTRY FACTOR
