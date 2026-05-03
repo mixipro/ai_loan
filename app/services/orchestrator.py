@@ -1,5 +1,8 @@
 # app/services/orchestrator.py
 
+from app.engines.risk_engine import calculate_risk_score
+from app.engines.interest_engine import calculate_interest_rate
+
 import logging
 
 logger = logging.getLogger(__name__)
