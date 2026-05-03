@@ -14,6 +14,6 @@ app.include_router(router)
 
 
 # health check (korisno za testove i Render)
-@app.get("/")
-def health():
-    return {"status": "running"}
+# @app.get("/")
+# def health():
+#     return {"status": "running"}
