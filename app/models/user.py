@@ -587,7 +587,7 @@ class Preferences(BaseModel):
 # ─────────────────────────────────────────
 
 class PersonalInfo(BaseModel):
-    age: int = Field(..., gt=0, lt=120)
+    age: int = Field(..., gt=17, lt=120)
 
 
 # ─────────────────────────────────────────
