@@ -71,22 +71,10 @@ def calculate_risk_score(user: UserInput) -> dict:
 
     if 25 <= age <= 55:
         score += 2
-    elif 25 < age <= 64:
+    elif 56 <= age <= 64:
         score += 1
     else:
         score += 0
-
-    # ─────────────────────────
-    # ⚙️ USER RISK PREFERENCE
-    # ─────────────────────────
-    pref = user.preferences.risk_profile
-
-    if pref.name == "LOW":
-        score += 1
-    elif pref.name == "MEDIUM":
-        score += 2
-    else:
-        score += 3
 
     # ─────────────────────────
     # 🌍 COUNTRY FACTOR

@@ -556,6 +556,18 @@ class RiskProfile(str, Enum):
             RiskProfile.HIGH:   "profit",
         }[self]
 
+#
+# class RiskLevel(str, Enum):
+#     LOW = "low"
+#     MEDIUM = "medium"
+#     HIGH = "high"
+#
+#
+# class InvestmentGoal(str, Enum):
+#     SAFETY = "safety"
+#     GROWTH = "growth"
+#     PROFIT = "profit"
+#
 
 class HorizonGroup(str, Enum):
     SHORT     = "1-3"
@@ -567,6 +579,7 @@ class HorizonGroup(str, Enum):
 class Preferences(BaseModel):
     risk_profile: RiskProfile
     horizon:      HorizonGroup
+
 
 
 # ─────────────────────────────────────────
