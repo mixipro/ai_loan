@@ -3,27 +3,32 @@ from app.models.user import UserInput
 
 
 @pytest.fixture
-def base_user():
-    return UserInput(
-        personal={"age": 30},
-        location={"country": "RS", "city": "Belgrade"},
-        financial={
+def valid_user_payload():
+    return {
+        "personal": {"age": 30},
+        "location": {"country": "RS", "city": "Belgrade"},
+        "financial": {
             "income": 1500,
             "expenses": 500,
             "debt": 100,
             "savings": 5000,
-            "currency": "EUR"
+            "currency": "EUR",
         },
-        professional={
+        "professional": {
             "sector": "Technology",
             "profession": "Software Engineer",
-            "employment_status": "full-time"
+            "employment_status": "full-time",
         },
-        preferences={
+        "preferences": {
             "risk_profile": "medium",
-            "horizon": "3-5"
-        }
-    )
+            "horizon": "3-5",
+        },
+    }
+
+
+@pytest.fixture
+def base_user(valid_user_payload):
+    return UserInput(**valid_user_payload)
 
 
 @pytest.fixture
@@ -36,17 +41,17 @@ def low_income_user():
             "expenses": 480,
             "debt": 300,
             "savings": 0,
-            "currency": "EUR"
+            "currency": "EUR",
         },
         professional={
             "sector": "Technology",
             "profession": "Software Engineer",
-            "employment_status": "freelancer"
+            "employment_status": "freelancer",
         },
         preferences={
             "risk_profile": "low",
-            "horizon": "1-3"
-        }
+            "horizon": "1-3",
+        },
     )
 
 
@@ -60,15 +65,15 @@ def high_income_user():
             "expenses": 1500,
             "debt": 200,
             "savings": 20000,
-            "currency": "EUR"
+            "currency": "EUR",
         },
         professional={
             "sector": "Technology",
             "profession": "Software Engineer",
-            "employment_status": "full-time"
+            "employment_status": "full-time",
         },
         preferences={
             "risk_profile": "high",
-            "horizon": "5-8"
-        }
+            "horizon": "5-8",
+        },
     )
