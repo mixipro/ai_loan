@@ -1,5 +1,8 @@
 # app/engines/inflation_engine.py
 
+from enum import Enum
+
+
 # ─────────────────────────
 # 🌍 COUNTRY INFLATION (PRIMARY)
 # ─────────────────────────
@@ -26,38 +29,65 @@ COUNTRY_INFLATION = {
     "RS": 0.06
 }
 
+
 # ─────────────────────────
-# 💱 CURRENCY INFLATION (FALLBACK)
+# 💱 CURRENCY INFLATION (GLOBAL)
 # ─────────────────────────
 CURRENCY_INFLATION = {
     "USD": 0.03,
     "EUR": 0.025
 }
 
+
 # ─────────────────────────
-# 🔍 GET INFLATION RATE
+# 🤖 AGENT TYPE
 # ─────────────────────────
-def get_inflation_rate(country: str, currency: str) -> float:
+class AgentType(str, Enum):
+    STOCK = "stock"
+    REAL_ESTATE = "real_estate"
+    BUSINESS = "business"
+
+
+# ─────────────────────────
+# 🔥 AGENT → INFLATION TYPE
+# ─────────────────────────
+AGENT_INFLATION_TYPE = {
+    AgentType.STOCK: "currency",
+    AgentType.REAL_ESTATE: "country",
+    AgentType.BUSINESS: "country",
+}
+
+
+# ─────────────────────────
+# 🔍 CORE FUNCTION
+# ─────────────────────────
+def get_inflation_rate(agent: AgentType, country: str, currency: str) -> float:
     """
-    Prioritet:
-    1. Country inflation
-    2. Currency inflation
-    3. Default (3%)
+    Inflacija zavisi od tipa investicije (agenta)
     """
-    if country in COUNTRY_INFLATION:
-        return COUNTRY_INFLATION[country]
 
-    if currency in CURRENCY_INFLATION:
-        return CURRENCY_INFLATION[currency]
+    inflation_type = AGENT_INFLATION_TYPE.get(agent, "country")
 
-    return 0.03
+    # 📈 GLOBAL (ETF, stock)
+    if inflation_type == "currency":
+        return CURRENCY_INFLATION.get(currency, 0.03)
+
+    # 🏠 / 💼 LOCAL (real estate, business)
+    return COUNTRY_INFLATION.get(country, 0.03)
 
 
 # ─────────────────────────
-# 📉 REAL VALUE (DISCOUNTED)
+# 📉 REAL VALUE
 # ─────────────────────────
-def adjust_for_inflation(amount: float, years: int, country: str, currency: str) -> float:
-    rate = get_inflation_rate(country, currency)
+def adjust_for_inflation(
+    amount: float,
+    years: int,
+    agent: AgentType,
+    country: str,
+    currency: str
+) -> float:
+
+    rate = get_inflation_rate(agent, country, currency)
 
     adjusted = amount / ((1 + rate) ** years)
 
@@ -65,10 +95,17 @@ def adjust_for_inflation(amount: float, years: int, country: str, currency: str)
 
 
 # ─────────────────────────
-# 📈 FUTURE VALUE (NOMINAL)
+# 📈 FUTURE VALUE
 # ─────────────────────────
-def future_value(amount: float, years: int, country: str, currency: str) -> float:
-    rate = get_inflation_rate(country, currency)
+def future_value(
+    amount: float,
+    years: int,
+    agent: AgentType,
+    country: str,
+    currency: str
+) -> float:
+
+    rate = get_inflation_rate(agent, country, currency)
 
     future = amount * ((1 + rate) ** years)
 
@@ -76,9 +113,15 @@ def future_value(amount: float, years: int, country: str, currency: str) -> floa
 
 
 # ─────────────────────────
-# 💰 REAL RETURN (ROI - INFLATION)
+# 💰 REAL RETURN (NAJBITNIJE)
 # ─────────────────────────
-def real_return(nominal_return: float, country: str, currency: str) -> float:
-    inflation = get_inflation_rate(country, currency)
+def real_return(
+    nominal_return: float,
+    agent: AgentType,
+    country: str,
+    currency: str
+) -> float:
+
+    inflation = get_inflation_rate(agent, country, currency)
 
     return round((1 + nominal_return) / (1 + inflation) - 1, 4)
