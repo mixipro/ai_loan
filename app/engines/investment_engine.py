@@ -22,7 +22,6 @@ def calculate_score(real_roi: float, risk: float, stability: float) -> float:
 # 🔍 CORE ENGINE
 # ─────────────────────────
 def evaluate_investments(user, agents_results: list, loan: dict) -> list:
-
     country = user.location.country.value
     currency = user.financial.currency.value
 
@@ -47,7 +46,6 @@ def evaluate_investments(user, agents_results: list, loan: dict) -> list:
         # 🏦 LOAN-AWARE FILTER
         if loan["approved"]:
             interest = loan["interest_rate"]
-
             if real_roi < interest:
                 status = "not_profitable"
             else:
@@ -58,15 +56,17 @@ def evaluate_investments(user, agents_results: list, loan: dict) -> list:
         # 🎯 SCORE
         score = calculate_score(real_roi, risk, stability)
 
-        results.append({
-            "agent": agent_name,
+        # ⭐ KLJUČNA PROMENA: čuvamo SVA polja iz agenta + dodajemo numerička
+        # Spread **agent_data ubacuje title, description, allocation, pros, cons, itd.
+        enriched = {
+            **agent_data,
             "nominal_return": nominal,
             "real_return": real_roi,
-            "risk": risk,
-            "stability": stability,
             "score": score,
-            "status": status
-        })
+            "status": status,
+        }
+
+        results.append(enriched)
 
     return results
 
@@ -84,5 +84,4 @@ def rank_investments(results: list) -> list:
 def get_best_investments(user, agents_results: list, loan: dict) -> list:
     evaluated = evaluate_investments(user, agents_results, loan)
     ranked = rank_investments(evaluated)
-
     return ranked

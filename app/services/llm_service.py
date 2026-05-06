@@ -1,21 +1,26 @@
 # app/services/llm_service.py
 
 import os
-import requests
+import httpx
 from dotenv import load_dotenv
 
 # učitaj .env
 load_dotenv()
 
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
-MODEL = os.getenv("OPENROUTER_MODEL", "openai/gpt-4o-mini")
+MODEL = os.getenv("OPENROUTER_MODEL", "openai/gpt-5.4")
+
+OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
+LLM_TIMEOUT = 30.0  # seconds
 
 
-def call_llm(prompt: str) -> str:
+async def call_llm(prompt: str) -> str:
+    """
+    Asinhroni poziv OpenRouter API-ja.
+    Koristi httpx.AsyncClient za non-blocking HTTP.
+    """
     if not OPENROUTER_API_KEY:
         raise ValueError("OPENROUTER_API_KEY not set in .env")
-
-    url = "https://openrouter.ai/api/v1/chat/completions"
 
     headers = {
         "Authorization": f"Bearer {OPENROUTER_API_KEY}",
@@ -31,7 +36,8 @@ def call_llm(prompt: str) -> str:
         "temperature": 0.3
     }
 
-    response = requests.post(url, json=payload, headers=headers)
+    async with httpx.AsyncClient(timeout=LLM_TIMEOUT) as client:
+        response = await client.post(OPENROUTER_URL, json=payload, headers=headers)
 
     if response.status_code != 200:
         raise Exception(f"LLM error: {response.text}")

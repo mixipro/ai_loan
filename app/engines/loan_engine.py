@@ -55,24 +55,21 @@ def calculate_loan_offer(user, risk: dict, interest: dict) -> dict:
     monthly_rate = annual_rate / 12
 
     # ─────────────────────────
-    # 📊 FORMULA ZA KREDIT (ANUITET)
+    # 📊 STEP 1: KOLIKI KREDIT MOŽE PRIMITI
+    # (anuitetna formula: rata → kredit)
     # ─────────────────────────
-    # M = P * r * (1+r)^n / ((1+r)^n - 1)
-    # → računamo P (loan amount)
-
     if monthly_rate == 0:
         loan_amount = available_payment * months
     else:
         numerator = available_payment * ((1 + monthly_rate) ** months - 1)
         denominator = monthly_rate * ((1 + monthly_rate) ** months)
-
         loan_amount = numerator / denominator
 
-    # sigurnosni clamp
     loan_amount = max(0, loan_amount)
 
     # ─────────────────────────
-    # 📉 REALNA KOREKCIJA PO RIZIKU
+    # 📉 STEP 2: REALNA KOREKCIJA PO RIZIKU
+    # banka smanjuje iznos kredita za rizičnije klijente
     # ─────────────────────────
     level = risk["level"]
 
@@ -83,12 +80,26 @@ def calculate_loan_offer(user, risk: dict, interest: dict) -> dict:
     # low_risk ostaje isto
 
     # ─────────────────────────
+    # 🔁 STEP 3: PRERAČUNAJ STVARNU RATU
+    # (anuitetna formula: kredit → rata)
+    # nakon korekcije, rata MORA biti manja
+    # ─────────────────────────
+    if monthly_rate == 0:
+        actual_payment = loan_amount / months
+    else:
+        actual_payment = (
+            loan_amount * monthly_rate * ((1 + monthly_rate) ** months)
+            / ((1 + monthly_rate) ** months - 1)
+        )
+
+    # ─────────────────────────
     # 📊 OUTPUT
     # ─────────────────────────
     return {
         "approved": True,
         "max_loan_amount": round(loan_amount, 2),
-        "monthly_payment": round(available_payment, 2),
+        "monthly_payment": round(actual_payment, 2),       # ← sad je tačno
+        "max_allowed_payment": round(available_payment, 2), # ← bonus: max koji korisnik MOŽE plaćati
         "loan_years": years,
         "interest_rate": annual_rate,
         "country": country
