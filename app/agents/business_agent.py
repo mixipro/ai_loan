@@ -1,14 +1,10 @@
 # app/agents/business_agent.py
 
-import json
 from app.services.llm_service import call_llm
+from app.agents._common import parse_llm_json, clamp, safe_list, safe_str, safe_dict
 
 
-# ─────────────────────────
-# 🧠 PROMPT BUILDER (UPGRADE)
-# ─────────────────────────
 def build_prompt(user, loan: dict) -> str:
-
     total_capital = user.financial.savings
 
     if loan.get("approved"):
@@ -17,19 +13,21 @@ def build_prompt(user, loan: dict) -> str:
     return f"""
 You are a senior financial advisor and startup strategist.
 
-Your task is to propose ONE realistic business idea based on the user's full financial situation.
+Your task is to propose ONE realistic, well-detailed business idea based on the user's full financial situation.
 
 USER PROFILE:
 - Age: {user.personal.age}
 - Country: {user.location.country.value}
-- Profession: {user.professional.profession}
-
+- City: {user.location.city}
+- Profession: {user.professional.profession.value}
+- Sector: {user.professional.sector.value}
+- Employment: {user.professional.employment_status.value}
 
 FINANCIAL DATA:
-- Monthly income: {user.financial.income}
-- Monthly expenses: {user.financial.expenses}
-- Savings: {user.financial.savings}
-- Total available capital (savings + loan): {round(total_capital, 2)}
+- Monthly income: {user.financial.income} {user.financial.currency.value}
+- Monthly expenses: {user.financial.expenses} {user.financial.currency.value}
+- Savings: {user.financial.savings} {user.financial.currency.value}
+- Total available capital (savings + loan): {round(total_capital, 2)} {user.financial.currency.value}
 
 LOAN CONDITIONS:
 - Approved: {loan.get("approved")}
@@ -39,73 +37,91 @@ LOAN CONDITIONS:
 - Loan years: {loan.get("loan_years")}
 
 PREFERENCES:
-- Risk tolerance: {user.preferences.risk_profile}
-- Investment horizon: {user.preferences.horizon}
+- Risk tolerance: {user.preferences.risk_profile.value}
+- Investment horizon: {user.preferences.horizon.value} years
 
-IMPORTANT CONSTRAINTS:
-- Business MUST be feasible with available capital
-- Consider loan repayment pressure
-- Consider user's skills and experience
-- Consider local market conditions
-- Match investment horizon:
-    - short → fast cash flow
-    - medium → balanced
-    - long → scalable growth
+YOUR TASK:
+Propose ONE specific, realistic business idea that:
+- Fits the available capital (total: {round(total_capital, 2)})
+- Matches user's profession and skills (leverage their background)
+- Considers local market in {user.location.city}, {user.location.country.value}
+- Aligns with risk tolerance and investment horizon
+- Accounts for loan repayment pressure (if loan is used)
 
-REQUIREMENTS:
-1. Suggest ONE realistic business idea
-2. Estimate expected annual return (0.05–0.30)
-3. Estimate risk (0–1)
-4. Estimate stability (0–1)
+REQUIRED FIELDS:
+1. title — short business name/concept (5-10 words)
+2. description — what the business does, why it fits user (2-3 sentences)
+3. allocation — how to split the capital (3-4 categories with amounts)
+4. expected_return — annual return as decimal (0.05–0.30)
+5. risk — risk level as decimal (0–1, where 1 = highest)
+6. stability — stability as decimal (0–1, where 1 = most stable)
+7. pros — 3 specific advantages of this idea
+8. cons — 2 specific risks/challenges
+9. next_steps — 3 concrete actions user should take to start
+10. time_to_profit — realistic timeframe (e.g. "6-12 months")
 
 STRICT RULES:
-- Return ONLY valid JSON
-- No explanation
-- No text outside JSON
+- Return ONLY valid JSON, no markdown fences
+- All monetary amounts in user's currency ({user.financial.currency.value})
+- Allocation amounts must sum to approximately {round(total_capital, 2)}
+- Be specific and realistic — no generic advice
 
 FORMAT:
 {{
   "agent": "business",
-  "idea": "...",
-  "expected_return": 0.12,
-  "risk": 0.6,
-  "stability": 0.7
+  "title": "...",
+  "description": "...",
+  "allocation": {{
+    "initial_investment": 0,
+    "working_capital": 0,
+    "marketing_budget": 0,
+    "reserve": 0
+  }},
+  "expected_return": 0.15,
+  "risk": 0.5,
+  "stability": 0.7,
+  "pros": ["...", "...", "..."],
+  "cons": ["...", "..."],
+  "next_steps": ["...", "...", "..."],
+  "time_to_profit": "..."
 }}
 """
 
 
-# ─────────────────────────
-# 🤖 LLM CALL
-# ─────────────────────────
-def generate_business_idea_llm(user, loan: dict) -> dict:
+async def generate_business_idea_llm(user, loan: dict) -> dict:
     prompt = build_prompt(user, loan)
-
-    raw = call_llm(prompt)
-
-    try:
-        data = json.loads(raw)
-    except:
-        raise ValueError(f"Invalid LLM output: {raw}")
-
-    return data
+    raw = await call_llm(prompt)
+    return parse_llm_json(raw)
 
 
-# ─────────────────────────
-# 🔒 VALIDATION (CRITICAL)
-# ─────────────────────────
 def validate_business_output(data: dict) -> dict:
+    """
+    Validira i normalizuje output.
+    Sva polja imaju default-e ako LLM nešto izostavi.
+    """
     return {
         "agent": "business",
-        "idea": data.get("idea", "Generic business"),
-        "expected_return": min(max(data.get("expected_return", 0.1), 0.01), 0.3),
-        "risk": min(max(data.get("risk", 0.5), 0), 1),
-        "stability": min(max(data.get("stability", 0.5), 0), 1),
+        "title": safe_str(data.get("title"), "Business opportunity"),
+        "description": safe_str(
+            data.get("description"),
+            "A business venture leveraging user's skills and available capital."
+        ),
+        "allocation": safe_dict(data.get("allocation"), {
+            "initial_investment": 0,
+            "working_capital": 0,
+            "marketing_budget": 0,
+            "reserve": 0,
+        }),
+        "expected_return": clamp(data.get("expected_return"), 0.01, 0.3, 0.1),
+        "risk": clamp(data.get("risk"), 0, 1, 0.5),
+        "stability": clamp(data.get("stability"), 0, 1, 0.5),
+        "pros": safe_list(data.get("pros"), []),
+        "cons": safe_list(data.get("cons"), []),
+        "next_steps": safe_list(data.get("next_steps"), []),
+        "time_to_profit": safe_str(data.get("time_to_profit"), "6-12 months"),
     }
 
 
-# ─────────────────────────
-# 🚀 FINAL ENTRY POINT
-# ─────────────────────────
-def run_business_agent(user, loan: dict) -> dict:
-    raw = generate_business_idea_llm(user, loan)
+async def run_business_agent(user, loan: dict) -> dict:
+    raw = await generate_business_idea_llm(user, loan)
     return validate_business_output(raw)
