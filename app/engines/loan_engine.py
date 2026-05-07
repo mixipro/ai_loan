@@ -29,7 +29,7 @@ def calculate_loan_offer(user, risk: dict, interest: dict) -> dict:
     # 🏦 MAKSIMALNA RATA (DTI LOGIKA)
     # ─────────────────────────
     # max 30% od prihoda ide na kredit
-    max_monthly_payment = income * 0.3
+    max_monthly_payment = income * 0.35
 
     # oduzmi postojeće obaveze
     available_payment = max_monthly_payment - debt

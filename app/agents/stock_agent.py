@@ -1,7 +1,15 @@
 # app/agents/stock_agent.py
 
 from app.services.llm_service import call_llm
-from app.agents._common import parse_llm_json, clamp, safe_list, safe_str, safe_dict
+from app.agents._common import parse_llm_json, clamp, safe_list, safe_str, safe_dict, call_llm_with_retry
+
+# Mapiranje weekly_hours → opis za stock kontekst
+HOURS_STOCK_DESCRIPTIONS = {
+    "0-5": "Less than 5h/week (PASSIVE — set-and-forget ETFs only, no active trading)",
+    "5-15": "5-15h/week (LIGHT — quarterly rebalancing, mostly passive)",
+    "15-30": "15-30h/week (MODERATE — can do monthly review, some sector rotation)",
+    "30+": "30+h/week (HEAVY — active monitoring, can pursue advanced strategies)"
+}
 
 
 def build_prompt(user, loan: dict) -> str:
@@ -9,6 +17,12 @@ def build_prompt(user, loan: dict) -> str:
 
     if loan.get("approved"):
         total_capital += loan.get("max_loan_amount", 0)
+
+    # ⭐ Format weekly hours (jedino novo polje za stock)
+    hours_desc = HOURS_STOCK_DESCRIPTIONS.get(
+        user.professional.weekly_hours.value,
+        "Unknown availability"
+    )
 
     return f"""
 You are a senior portfolio manager and stock market strategist.
@@ -19,6 +33,7 @@ USER PROFILE:
 - Age: {user.personal.age}
 - Country: {user.location.country.value}
 - Currency: {user.financial.currency.value}
+- Weekly hours available: {hours_desc}
 
 FINANCIAL DATA:
 - Monthly income: {user.financial.income}
@@ -47,6 +62,11 @@ Propose ONE diversified stock/ETF portfolio that:
     - short (1-3) → lower volatility, more bonds
     - medium (3-5) → balanced ETF mix
     - long (5+)   → aggressive growth, more equities
+- Matches WEEKLY HOURS ({hours_desc}):
+    - 0-5h → 3-5 ETFs max, pure index strategy, no individual stocks
+    - 5-15h → ETF-heavy, maybe 1-2 individual stocks
+    - 15-30h → can include sector rotation, more diversification
+    - 30+h → can include individual stock picks, momentum strategies
 
 REQUIRED FIELDS:
 1. title — short portfolio name (e.g., "Conservative Dividend Portfolio")
@@ -62,7 +82,13 @@ REQUIRED FIELDS:
 
 STRICT RULES:
 - Return ONLY valid JSON, no markdown fences
-- Allocation must contain CONCRETE TICKERS with percentages
+
+ALLOCATION RULES (CRITICAL):
+- Use PERCENTAGE strings for allocation (e.g., "40%"), NOT absolute amounts
+- All percentages MUST sum to exactly 100%
+- Maximum 6 positions (ETFs/tickers) — keep it simple
+- Always include a "Cash reserve" position of minimum 5-10%
+- Verify: all percentages add up to 100%
 
 FORMAT:
 {{
@@ -88,9 +114,10 @@ FORMAT:
 
 async def generate_stock_strategy_llm(user, loan: dict) -> dict:
     prompt = build_prompt(user, loan)
-    raw = await call_llm(prompt)
-    return parse_llm_json(raw)
-
+    return await call_llm_with_retry(
+        llm_call=lambda: call_llm(prompt),
+        agent_name="stock"
+    )
 
 def validate_stock_output(data: dict) -> dict:
     return {

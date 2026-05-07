@@ -43,25 +43,28 @@ def evaluate_investments(user, agents_results: list, loan: dict) -> list:
             currency=currency
         )
 
-        # 🏦 LOAN-AWARE FILTER
+        # 🏦 LOAN-AWARE FILTER + NET RETURN
         if loan["approved"]:
             interest = loan["interest_rate"]
+            net_return = real_roi - interest
+
             if real_roi < interest:
                 status = "not_profitable"
             else:
                 status = "profitable"
         else:
+            net_return = real_roi
             status = "no_loan"
 
         # 🎯 SCORE
         score = calculate_score(real_roi, risk, stability)
 
-        # ⭐ KLJUČNA PROMENA: čuvamo SVA polja iz agenta + dodajemo numerička
-        # Spread **agent_data ubacuje title, description, allocation, pros, cons, itd.
+        # ⭐ čuvamo SVA polja iz agenta + dodajemo numerička
         enriched = {
             **agent_data,
             "nominal_return": nominal,
             "real_return": real_roi,
+            "net_return": round(net_return, 4),
             "score": score,
             "status": status,
         }

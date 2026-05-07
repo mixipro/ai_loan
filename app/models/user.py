@@ -532,16 +532,6 @@ class EmploymentStatus(str, Enum):
     STUDENT       = "student"
     RETIRED       = "retired"
 
-class ProfessionalInfo(BaseModel):
-    sector: Sector
-    profession: Profession
-    employment_status: EmploymentStatus
-
-
-
-# ─────────────────────────────────────────
-# ⚙️ PREFERENCES
-# ─────────────────────────────────────────
 
 class RiskProfile(str, Enum):
     LOW    = "low"     # → safety
@@ -556,18 +546,11 @@ class RiskProfile(str, Enum):
             RiskProfile.HIGH:   "profit",
         }[self]
 
-#
-# class RiskLevel(str, Enum):
-#     LOW = "low"
-#     MEDIUM = "medium"
-#     HIGH = "high"
-#
-#
-# class InvestmentGoal(str, Enum):
-#     SAFETY = "safety"
-#     GROWTH = "growth"
-#     PROFIT = "profit"
-#
+
+
+# ─────────────────────────────────────────
+# ⚙️ PREFERENCES
+# ─────────────────────────────────────────
 
 class HorizonGroup(str, Enum):
     SHORT     = "1-3"
@@ -576,11 +559,76 @@ class HorizonGroup(str, Enum):
     VERY_LONG = "8+"
 
 
+
 class Preferences(BaseModel):
     risk_profile: RiskProfile
     horizon:      HorizonGroup
 
+# ─────────────────────────
+# ⏰ WEEKLY HOURS AVAILABLE
+# ─────────────────────────
 
+class WeeklyHours(str, Enum):
+    MINIMAL = "0-5"      # passive (< 1h dnevno)
+    LIGHT = "5-15"       # weekend hobi
+    MODERATE = "15-30"   # ozbiljan side biznis
+    HEAVY = "30+"        # full-time biznis
+
+# 🎯 PREDEFINED INTERESTS (50)
+# ─────────────────────────
+# ─────────────────────────
+PREDEFINED_INTERESTS = [
+    # Sport & fitness
+    "fitness", "yoga", "running", "cycling", "swimming",
+    "team sports", "martial arts", "hiking", "rock climbing", "skiing",
+
+    # Food & drink
+    "cooking", "baking", "wine", "coffee", "barbecue",
+
+    # Tech & gaming
+    "programming", "ai/ml", "gaming", "blockchain", "robotics",
+
+    # Creative
+    "photography", "videography", "music", "writing", "drawing",
+    "design", "fashion", "interior design", "crafts",
+
+    # Business & finance
+    "investing", "real estate", "startups", "crypto", "trading",
+
+    # Travel & lifestyle
+    "travel", "languages", "history", "cultures", "outdoor adventure",
+
+    # Wellness & lifestyle
+    "meditation", "psychology", "self-improvement", "minimalism", "sustainability",
+
+    # Education & hobbies
+    "reading", "podcasts", "online courses", "board games", "puzzles",
+    "gardening",
+]
+
+
+
+
+class ProfessionalInfo(BaseModel):
+    sector: Sector
+    profession: Profession
+    employment_status: EmploymentStatus
+
+    # ⭐ NOVA POLJA
+    interests: List[str] = Field(
+        default_factory=list,
+        description=f"List of interests. Predefined: {len(PREDEFINED_INTERESTS)}, but you can also add custom.",
+        max_length=4
+    )
+    prior_experience: str = Field(
+        default="",
+        description="Brief description of previous businesses/projects (free text)",
+        max_length=500
+    )
+    weekly_hours: WeeklyHours = Field(
+        default=WeeklyHours.LIGHT,
+        description="How many hours a week the user can invest in the business"
+    )
 
 # ─────────────────────────────────────────
 # 👤 PERSONAL
@@ -602,30 +650,3 @@ class UserInput(BaseModel):
     preferences:  Preferences
 
 
-# ─────────────────────────────────────────
-# 🧪 PRIMER VALIDNOG UNOSA
-# ─────────────────────────────────────────
-#
-# EXAMPLE = UserInput(
-#     personal=PersonalInfo(age=32),
-#     location=LocationInfo(country=Country.SERBIA, city="Belgrade"),
-#     financial=FinancialInfo(
-#         income=2500,
-#         expenses=1800,
-#         debt=5000,
-#         savings=12000,
-#         currency=Currency.EUR,
-#     ),
-#     professional=ProfessionalInfo(
-#         sector=Sector.TECHNOLOGY,
-#         onet_code="15-1252.00",
-#         profession_title="Software Developers",
-#         skills=["Python", "FastAPI", "PostgreSQL"],
-#         employment_status=EmploymentStatus.FULL_TIME,
-#         years_at_job=4,
-#     ),
-#     preferences=Preferences(
-#         risk_profile=RiskProfile.MEDIUM,
-#         horizon=HorizonGroup.MEDIUM,
-#     ),
-# )
