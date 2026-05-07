@@ -143,5 +143,5 @@ async def run_pipeline(user) -> dict:
         "recommendation": judgment["recommended"],
         "reasoning": judgment["reasoning"],
         "next_step": judgment["next_step"],
-        "profile_used": judgment["profile_used"],
+        "profile_used": judgment.get("profile_used", user.preferences.risk_profile.value),
     }
