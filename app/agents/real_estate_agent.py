@@ -1,6 +1,6 @@
 # app/agents/real_estate_agent.py
 
-from app.services.llm_service import call_llm
+from app.services.llm_service import call_llm_text as call_llm
 from app.agents._common import (
     parse_llm_json, clamp, safe_list, safe_str, safe_dict,
     call_llm_with_retry
@@ -245,7 +245,7 @@ FORMAT:
     "down_payment": 0,
     "taxes_and_fees": 0,
     "renovation_reserve": 0,
-    "emergency_fund": 0
+    "emergency_fund": 0       
   }},
   "expected_return": 0.06,
   "risk": 0.3,

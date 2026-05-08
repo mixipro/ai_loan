@@ -4,6 +4,9 @@ import json
 import asyncio
 import logging
 from typing import Any, Callable, Awaitable
+import json
+from app.services.llm_service import call_llm
+from app.agents._tools import execute_tool
 
 logger = logging.getLogger(__name__)
 
@@ -168,3 +171,84 @@ def validate_allocation(allocation: dict, total_capital: float, agent_name: str)
         )
 
     return allocation
+
+
+# ─────────────────────────
+# 🛠️ TOOL EXECUTION LOOP
+# ─────────────────────────
+
+async def call_llm_with_tools(
+        prompt: str,
+        tools: list,
+        agent_name: str = "unknown",
+        max_tool_rounds: int = 3
+) -> dict:
+    """
+    Poziva LLM sa function calling support-om.
+
+    Flow:
+    1. Pošalji LLM-u prompt + dostupne tools
+    2. Ako LLM hoće da pozove tool → izvrši ga
+    3. Pošalji rezultat tool-a nazad LLM-u
+    4. Ponavljaj dok LLM ne vrati final answer (bez tool_calls)
+    5. Parsira finalni JSON
+    """
+    messages = [
+        {
+            "role": "system",
+            "content": (
+                "You are a financial advisor AI. "
+                "Use the provided tools to calculate exact values before generating final JSON output. "
+                "Always call tools when they are relevant to your task."
+            )
+        },
+        {"role": "user", "content": prompt}
+    ]
+
+    for round_num in range(max_tool_rounds):
+        logger.info(f"[{agent_name}] Tool round {round_num + 1}/{max_tool_rounds}")
+
+        response = await call_llm(prompt="", tools=tools, messages=messages)
+        message = response["choices"][0]["message"]
+
+        tool_calls = message.get("tool_calls")
+
+        if not tool_calls:
+            # 🎯 Nema više tool calls — parsiraj finalni JSON
+            content = message.get("content", "")
+            if not content:
+                raise ValueError(f"[{agent_name}] LLM returned empty content (no tool calls)")
+
+            return parse_llm_json(content)
+
+        # 🛠️ Izvrši tool call(s)
+        # Dodaj LLM-ov assistant message u history
+        messages.append({
+            "role": "assistant",
+            "content": message.get("content"),
+            "tool_calls": tool_calls
+        })
+
+        for tool_call in tool_calls:
+            tool_name = tool_call["function"]["name"]
+            tool_args_raw = tool_call["function"]["arguments"]
+
+            try:
+                tool_args = json.loads(tool_args_raw)
+            except json.JSONDecodeError:
+                logger.error(f"[{agent_name}] Failed to parse tool args: {tool_args_raw}")
+                tool_args = {}
+
+            logger.info(f"[{agent_name}] Calling tool '{tool_name}' with args: {tool_args}")
+
+            result = execute_tool(tool_name, tool_args)
+
+            logger.info(f"[{agent_name}] Tool result: {result}")
+
+            messages.append({
+                "role": "tool",
+                "tool_call_id": tool_call["id"],
+                "content": json.dumps(result)
+            })
+
+    raise ValueError(f"[{agent_name}] Tool execution exceeded {max_tool_rounds} rounds")

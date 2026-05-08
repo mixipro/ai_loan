@@ -38,7 +38,8 @@ def calculate_risk_score(user: UserInput) -> dict:
     # ─────────────────────────
     # 📉 DEBT RATIO
     # ─────────────────────────
-    debt = user.financial.debt
+
+    debt = user.financial.monthly_debt
     debt_ratio = debt / income if income > 0 else 1
 
     if debt_ratio < 0.2:
@@ -89,14 +90,17 @@ def calculate_risk_score(user: UserInput) -> dict:
     adjusted_score = score * (1 / country_factor)
 
     # ─────────────────────────
-    # 🔥 FINAL RISK LEVEL
+    # 🔥 FINAL RISK LEVEL (CREDITWORTHINESS)
     # ─────────────────────────
     if adjusted_score >= 12:
         level = "low_risk"
+        creditworthiness = "high"   # ⭐ NOVO — high creditworthiness = low risk for the bank
     elif adjusted_score >= 8:
         level = "medium_risk"
+        creditworthiness = "medium"
     else:
         level = "high_risk"
+        creditworthiness = "low"    # ⭐ NOVO — low creditworthiness = high risk for the bank
 
     # ─────────────────────────
     # 📊 OUTPUT
@@ -104,7 +108,8 @@ def calculate_risk_score(user: UserInput) -> dict:
     return {
         "base_score": score,
         "adjusted_score": round(adjusted_score, 2),
-        "level": level,
+        "level": level,                          # backward compat (interest/loan engines koriste)
+        "creditworthiness": creditworthiness,    # ⭐ NOVO — bank-side rating
         "country": country,
         "country_factor": country_factor,
         "disposable_income": disposable,

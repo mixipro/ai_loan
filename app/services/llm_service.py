@@ -4,6 +4,7 @@ import os
 import asyncio
 import httpx
 import logging
+from typing import Optional, List
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -16,16 +17,26 @@ OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 LLM_TIMEOUT = 60.0
 LLM_MAX_TOKENS = 4000
 
-# ⭐ RETRY KONFIGURACIJA
-MAX_RETRIES = 2  # ukupno 3 pokušaja (1 + 2 retry)
-RETRY_BACKOFF = 1.5  # sekundi između pokušaja (eksponencijalno)
+MAX_RETRIES = 2
+RETRY_BACKOFF = 1.5
 
 
-async def call_llm(prompt: str) -> str:
+async def call_llm(
+        prompt: str = "",
+        tools: Optional[List[dict]] = None,
+        messages: Optional[List[dict]] = None,
+) -> dict:
     """
-    Asinhroni poziv OpenRouter API-ja sa retry logikom.
-    Retry se aktivira na network errors (timeout, 5xx, connection errors).
-    NE retry-uje na 4xx (autentifikacija, bad request — to su naše greške).
+    Asinhroni poziv OpenRouter API-ja sa opcionalnim tools support-om.
+
+    Args:
+        prompt: User prompt (used if messages not provided)
+        tools: Optional list of function calling tool schemas
+        messages: Optional pre-built message list (for tool result follow-ups)
+
+    Returns:
+        FULL response dict from API.
+        Caller treba da pristupi response["choices"][0]["message"] za content/tool_calls.
     """
     if not OPENROUTER_API_KEY:
         raise ValueError("OPENROUTER_API_KEY not set in .env")
@@ -35,39 +46,43 @@ async def call_llm(prompt: str) -> str:
         "Content-Type": "application/json"
     }
 
-    payload = {
-        "model": MODEL,
-        "messages": [
+    # Build messages ako nisu prosleđeni
+    if messages is None:
+        messages = [
             {"role": "system", "content": "You are a financial advisor AI."},
             {"role": "user", "content": prompt}
-        ],
+        ]
+
+    payload = {
+        "model": MODEL,
+        "messages": messages,
         "temperature": 0.3,
         "max_tokens": LLM_MAX_TOKENS,
     }
 
+    if tools:
+        payload["tools"] = tools
+        payload["tool_choice"] = "auto"
+
     last_exception = None
 
-    for attempt in range(MAX_RETRIES + 1):  # 0, 1, 2
+    for attempt in range(MAX_RETRIES + 1):
         try:
             async with httpx.AsyncClient(timeout=LLM_TIMEOUT) as client:
                 response = await client.post(OPENROUTER_URL, json=payload, headers=headers)
 
-            # 🛡️ Razlikuj retry-able vs non-retry-able errore
             if response.status_code == 200:
-                return response.json()["choices"][0]["message"]["content"]
+                return response.json()  # ⭐ Vraća ceo response
 
-            # 4xx = naša greška (auth, bad request) — NEMA retry-ja
             if 400 <= response.status_code < 500:
                 raise Exception(f"LLM client error ({response.status_code}): {response.text}")
 
-            # 5xx = server greška — RETRY
             raise Exception(f"LLM server error ({response.status_code}): {response.text}")
 
         except (httpx.TimeoutException, httpx.NetworkError, httpx.RemoteProtocolError) as e:
-            # Network/timeout errors → retry
             last_exception = e
             if attempt < MAX_RETRIES:
-                wait = RETRY_BACKOFF ** attempt  # 1.0, 1.5, 2.25 seconds
+                wait = RETRY_BACKOFF ** attempt
                 logger.warning(
                     f"LLM call failed (attempt {attempt + 1}/{MAX_RETRIES + 1}): {e}. "
                     f"Retrying in {wait:.1f}s..."
@@ -77,7 +92,6 @@ async def call_llm(prompt: str) -> str:
 
         except Exception as e:
             last_exception = e
-            # Server 5xx errors → retry
             if "server error" in str(e).lower() and attempt < MAX_RETRIES:
                 wait = RETRY_BACKOFF ** attempt
                 logger.warning(
@@ -86,8 +100,18 @@ async def call_llm(prompt: str) -> str:
                 )
                 await asyncio.sleep(wait)
                 continue
-            # Client 4xx errors → ne retry-uj
             raise
 
-    # Sve pokušaje smo iscrpli
     raise Exception(f"LLM failed after {MAX_RETRIES + 1} attempts. Last error: {last_exception}")
+
+
+# ─────────────────────────
+# 🎯 BACKWARD COMPATIBLE WRAPPER
+# ─────────────────────────
+async def call_llm_text(prompt: str) -> str:
+    """
+    Stara verzija — vraća samo content string.
+    Za agente koji NE koriste tools (business, real_estate, judge).
+    """
+    response = await call_llm(prompt=prompt)
+    return response["choices"][0]["message"]["content"]

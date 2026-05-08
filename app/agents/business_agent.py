@@ -1,6 +1,6 @@
 # app/agents/business_agent.py
 
-from app.services.llm_service import call_llm
+from app.services.llm_service import call_llm_text as call_llm
 from app.agents._common import parse_llm_json, clamp, safe_list, safe_str, safe_dict, call_llm_with_retry
 
 # Mapiranje weekly_hours → opis za LLM

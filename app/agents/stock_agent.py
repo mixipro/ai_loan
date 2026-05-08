@@ -1,14 +1,16 @@
 # app/agents/stock_agent.py
 
-from app.services.llm_service import call_llm
-from app.agents._common import parse_llm_json, clamp, safe_list, safe_str, safe_dict, call_llm_with_retry
+from app.agents._common import (
+    parse_llm_json, clamp, safe_list, safe_str, safe_dict,
+    call_llm_with_tools  # ⭐ NOVO
+)
+from app.agents._tools import STOCK_TOOLS  # ⭐ NOVO
 
-# Mapiranje weekly_hours → opis za stock kontekst
 HOURS_STOCK_DESCRIPTIONS = {
-    "0-5": "Less than 5h/week (PASSIVE — set-and-forget ETFs only, no active trading)",
+    "0-5": "Less than 5h/week (PASSIVE — set-and-forget ETFs only)",
     "5-15": "5-15h/week (LIGHT — quarterly rebalancing, mostly passive)",
-    "15-30": "15-30h/week (MODERATE — can do monthly review, some sector rotation)",
-    "30+": "30+h/week (HEAVY — active monitoring, can pursue advanced strategies)"
+    "15-30": "15-30h/week (MODERATE — monthly review, some sector rotation)",
+    "30+": "30+h/week (HEAVY — active monitoring, advanced strategies)"
 }
 
 
@@ -18,7 +20,6 @@ def build_prompt(user, loan: dict) -> str:
     if loan.get("approved"):
         total_capital += loan.get("max_loan_amount", 0)
 
-    # ⭐ Format weekly hours (jedino novo polje za stock)
     hours_desc = HOURS_STOCK_DESCRIPTIONS.get(
         user.professional.weekly_hours.value,
         "Unknown availability"
@@ -27,8 +28,6 @@ def build_prompt(user, loan: dict) -> str:
     return f"""
 You are a senior portfolio manager and stock market strategist.
 
-Your task is to propose ONE realistic, well-detailed stock/ETF investment strategy.
-
 USER PROFILE:
 - Age: {user.personal.age}
 - Country: {user.location.country.value}
@@ -36,59 +35,58 @@ USER PROFILE:
 - Weekly hours available: {hours_desc}
 
 FINANCIAL DATA:
-- Monthly income: {user.financial.income}
-- Monthly expenses: {user.financial.expenses}
-- Savings: {user.financial.savings}
 - Total available capital: {round(total_capital, 2)} {user.financial.currency.value}
 
 LOAN CONDITIONS:
 - Approved: {loan.get("approved")}
-- Max loan: {loan.get("max_loan_amount")}
 - Interest rate: {loan.get("interest_rate")}
-- Monthly payment: {loan.get("monthly_payment")}
 
 PREFERENCES:
 - Risk tolerance: {user.preferences.risk_profile.value}
 - Investment horizon: {user.preferences.horizon.value} years
 
+═══════════════════════════════════════════════════════════
+🛠️ MANDATORY WORKFLOW (DO NOT SKIP):
+═══════════════════════════════════════════════════════════
+
+STEP 1: Call `calculate_stock_allocation` tool with:
+        risk_profile="{user.preferences.risk_profile.value}"
+        horizon="{user.preferences.horizon.value}"
+        → This returns the EXACT ETF allocation percentages.
+
+STEP 2: Call `calculate_expected_return` tool with the same parameters.
+        → This returns EXACT expected_return, risk, and stability values.
+
+STEP 3: Use the tool results in your JSON output:
+        - allocation = exactly what calculate_stock_allocation returned
+        - expected_return, risk, stability = exactly what calculate_expected_return returned
+
+DO NOT make up your own numbers. The tools provide historically-accurate values.
+
+═══════════════════════════════════════════════════════════
+
 YOUR TASK:
-Propose ONE diversified stock/ETF portfolio that:
-- Focuses on GROWTH (capital appreciation), not active income
-- Matches risk tolerance:
-    - low    → bonds, dividend ETFs (VOO, VYM, BND, SCHD)
-    - medium → broad market ETFs (VOO, VTI, VXUS, IWM)
-    - high   → growth ETFs, tech, emerging markets (QQQ, ARKK, SOXX, EEM)
-- Matches investment horizon:
-    - short (1-3) → lower volatility, more bonds
-    - medium (3-5) → balanced ETF mix
-    - long (5+)   → aggressive growth, more equities
-- Matches WEEKLY HOURS ({hours_desc}):
-    - 0-5h → 3-5 ETFs max, pure index strategy, no individual stocks
-    - 5-15h → ETF-heavy, maybe 1-2 individual stocks
-    - 15-30h → can include sector rotation, more diversification
-    - 30+h → can include individual stock picks, momentum strategies
+Generate a portfolio strategy that:
+- Uses tool-provided allocation (DO NOT modify percentages)
+- Uses tool-provided metrics (DO NOT modify return/risk/stability)
+- Adds creative, personalized: title, description, pros, cons, next_steps
 
 REQUIRED FIELDS:
 1. title — short portfolio name (e.g., "Conservative Dividend Portfolio")
 2. description — what this portfolio invests in and why (2-3 sentences)
-3. allocation — concrete split with tickers and percentages
-4. expected_return — annual return as decimal (0.04–0.20)
-5. risk — risk level (0–1)
-6. stability — stability (0–1)
-7. pros — 3 advantages
-8. cons — 2 risks
-9. next_steps — 3 concrete actions (broker, account type, first ETFs to buy)
-10. time_to_profit — realistic horizon (e.g. "3-5 years")
+3. allocation — EXACTLY from calculate_stock_allocation tool
+4. expected_return — EXACTLY from calculate_expected_return tool
+5. risk — EXACTLY from calculate_expected_return tool
+6. stability — EXACTLY from calculate_expected_return tool
+7. pros — 3 advantages (BE CREATIVE, personalize)
+8. cons — 2 risks (BE CREATIVE, personalize)
+9. next_steps — 3 concrete actions (broker, account type, first ETFs)
+10. time_to_profit — realistic horizon
 
 STRICT RULES:
 - Return ONLY valid JSON, no markdown fences
-
-ALLOCATION RULES (CRITICAL):
-- Use PERCENTAGE strings for allocation (e.g., "40%"), NOT absolute amounts
-- All percentages MUST sum to exactly 100%
-- Maximum 6 positions (ETFs/tickers) — keep it simple
-- Always include a "Cash reserve" position of minimum 5-10%
-- Verify: all percentages add up to 100%
+- DO NOT change tool-provided numbers
+- BE CREATIVE in title, description, pros, cons, next_steps
 
 FORMAT:
 {{
@@ -98,8 +96,7 @@ FORMAT:
   "allocation": {{
     "VOO": "40%",
     "VXUS": "30%",
-    "BND": "20%",
-    "Cash reserve": "10%"
+    ...
   }},
   "expected_return": 0.08,
   "risk": 0.5,
@@ -114,10 +111,14 @@ FORMAT:
 
 async def generate_stock_strategy_llm(user, loan: dict) -> dict:
     prompt = build_prompt(user, loan)
-    return await call_llm_with_retry(
-        llm_call=lambda: call_llm(prompt),
+
+    # ⭐ KORISTI TOOLS
+    return await call_llm_with_tools(
+        prompt=prompt,
+        tools=STOCK_TOOLS,
         agent_name="stock"
     )
+
 
 def validate_stock_output(data: dict) -> dict:
     return {

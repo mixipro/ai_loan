@@ -1,10 +1,11 @@
 # app/agents/judge_agent.py
 
 import logging
-from app.services.llm_service import call_llm
+from app.services.llm_service import call_llm_text as call_llm
 from app.agents._common import parse_llm_json, safe_str, call_llm_with_retry
 
 logger = logging.getLogger(__name__)
+
 
 # ─────────────────────────
 # 🎯 PROFILE WEIGHTS
@@ -73,6 +74,10 @@ def select_best_strategy(strategies, profile):
 
 
 def build_explanation_prompt(user, loan: dict, all_strategies: list, chosen: dict) -> str:
+    """
+    Bogatiji prompt — koristi nova polja iz agenata + nove user kontekste.
+    Naglašava razdvajanje 'investment risk' od 'creditworthiness'.
+    """
     strategies_text = ""
     for s in all_strategies:
         strategies_text += f"""
@@ -80,6 +85,7 @@ def build_explanation_prompt(user, loan: dict, all_strategies: list, chosen: dic
 - Title: {s.get('title', 'N/A')}
 - Description: {s.get('description', 'N/A')}
 - Real return: {s['real_return'] * 100:.2f}%
+- Net return (after loan interest): {s.get('net_return', 0) * 100:.2f}%
 - Risk: {s['risk']}, Stability: {s['stability']}
 - Status: {s.get('status', 'N/A')}
 - Pros: {', '.join(s.get('pros', []))}
@@ -104,8 +110,15 @@ USER PROFILE:
 - Weekly hours available: {user.professional.weekly_hours.value}
 - Monthly income: {user.financial.income} {user.financial.currency.value}
 - Savings: {user.financial.savings}
-- Risk tolerance: {user.preferences.risk_profile.value}
+- Investment risk tolerance: {user.preferences.risk_profile.value} (user's PREFERENCE for portfolio risk)
 - Investment horizon: {user.preferences.horizon.value} years
+
+⚠️ IMPORTANT CONCEPT:
+"Investment risk tolerance" (user's preference for portfolio risk) and 
+"creditworthiness" (bank-side rating affecting loan terms) are EVALUATED INDEPENDENTLY.
+A user can be highly creditworthy (good loan terms) while preferring conservative investments.
+Always honor the user's stated risk tolerance for investment selection.
+DO NOT confuse these two dimensions in your reasoning.
 
 LOAN CONDITIONS:
 - Approved: {loan.get("approved")}
@@ -121,11 +134,11 @@ CHOSEN STRATEGY: {chosen['agent']}
 
 YOUR TASK:
 Write a personalized recommendation in 5-7 sentences explaining:
-1. Why "{chosen.get('title')}" matches user's risk tolerance ({user.preferences.risk_profile.value})
+1. Why "{chosen.get('title')}" matches user's INVESTMENT risk tolerance ({user.preferences.risk_profile.value})
 2. Why it suits investment horizon ({user.preferences.horizon.value} years)
 3. How it fits weekly hours availability ({user.professional.weekly_hours.value}) and interests ({interests_text})
-4. Specifically why it was preferred over the other 2 strategies (compare directly)
-5. What the user should expect financially in concrete numbers
+4. Specifically why it was preferred over the other 2 strategies (compare directly using net_return)
+5. What the user should expect financially in concrete numbers (use NET return after loan interest)
 6. The first concrete step they should take this week
 
 Write in second person ("you should...", "your profile..."). Be specific, not generic.
@@ -135,7 +148,7 @@ STRICT RULES:
 - reasoning: 5-7 sentences, persuasive and specific
 - next_step: ONE concrete action (not a list)
 - comparison: short comparison summary (1-2 sentences explaining trade-offs)
-
+- Use NET return (after loan interest) when discussing real profitability
 
 FORMAT:
 {{
@@ -154,7 +167,6 @@ async def generate_explanation(user, loan: dict, all_strategies: list, chosen: d
     prompt = build_explanation_prompt(user, loan, all_strategies, chosen)
 
     try:
-        # ⭐ NOVO: Retry wrapper umesto direktnog poziva
         data = await call_llm_with_retry(
             llm_call=lambda: call_llm(prompt),
             agent_name="judge"
@@ -167,12 +179,11 @@ async def generate_explanation(user, loan: dict, all_strategies: list, chosen: d
         }
 
     except Exception as e:
-        # 🛡️ FALLBACK — ako i retry ne uspe, koristi rule-based eksplanaciju
         logger.error(f"Judge LLM failed after retries, using fallback: {e}")
 
         return {
             "reasoning": (
-                f"Based on your {user.preferences.risk_profile.value} risk tolerance "
+                f"Based on your {user.preferences.risk_profile.value} investment risk tolerance "
                 f"and {user.preferences.horizon.value} year horizon, "
                 f"the {chosen['agent']} strategy ('{chosen.get('title', 'N/A')}') "
                 f"offers the best balance of return ({chosen['real_return'] * 100:.1f}%) "
@@ -200,7 +211,7 @@ async def run_judge_agent(user, loan: dict, strategies: list) -> dict:
             "reasoning": "No valid strategies available.",
             "next_step": "Improve financial profile and try again.",
             "comparison": "",
-            "profile_used": profile,  # ⭐ DODATO
+            "profile_used": profile,
         }
 
     explanation = await generate_explanation(user, loan, strategies, chosen)
