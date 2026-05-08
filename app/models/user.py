@@ -301,18 +301,17 @@ class Currency(str, Enum):
 
 
 class FinancialInfo(BaseModel):
-    income:   int = Field(..., gt=0, description="Mesečni prihod")
-    expenses: int = Field(..., ge=0, description="Mesečni troškovi")
-    debt:     int = Field(..., ge=0, description="Ukupan dug")
-    savings:  int = Field(..., ge=0, description="Ukupna štednja")
-    currency: Currency
+    income:        int = Field(..., gt=0, description="Mesečni prihod")
+    expenses:      int = Field(..., ge=0, description="Mesečni troškovi")
+    monthly_debt:  int = Field(..., ge=0, description="Mesečna rata postojećeg duga")
+    savings:       int = Field(..., ge=0, description="Ukupna štednja")
+    currency:      Currency
 
     @model_validator(mode="after")
     def expenses_lt_income(self) -> "FinancialInfo":
         if self.expenses >= self.income:
             raise ValueError("Troškovi ne mogu biti veći ili jednaki prihodima.")
         return self
-
 
 # ─────────────────────────────────────────
 # 💼 PROFESSIONAL

@@ -1,0 +1,808 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Investment Advisor</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .strategy-card { transition: all 0.2s; }
+        .strategy-card:hover { transform: translateY(-2px); }
+        .interest-chip { cursor: pointer; user-select: none; }
+        .interest-chip.selected { background: #3b82f6; color: white; }
+        .loading-spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #3b82f6;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body class="bg-gradient-to-br from-slate-50 to-blue-50 min-h-screen">
+
+<div class="max-w-6xl mx-auto p-6">
+
+    <!-- HEADER -->
+    <header class="text-center mb-8 pt-6">
+        <h1 class="text-4xl font-bold text-gray-800 mb-2">
+            🤖 AI Investment & Loan Advisor
+        </h1>
+        <p class="text-gray-600">Multi-agent financial advisor with custom calculator</p>
+    </header>
+
+    <!-- API status -->
+    <div id="api-status" class="mb-4 p-3 rounded-lg text-center text-sm bg-yellow-100 text-yellow-800">
+        ⏳ Loading options from server...
+    </div>
+
+    <!-- ═══════════════ SECTION 1: USER FORM ═══════════════ -->
+    <section id="form-section" class="bg-white rounded-2xl shadow-lg p-8 mb-6 hidden">
+        <h2 class="text-2xl font-bold text-gray-800 mb-6">
+            📋 Your Profile
+        </h2>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+
+            <!-- LEFT COLUMN -->
+            <div class="space-y-4">
+                <h3 class="font-semibold text-gray-700 border-b pb-2">Personal</h3>
+
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Age</label>
+                    <input type="number" id="age" min="18" max="100" value="32"
+                           class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500">
+                </div>
+
+                <h3 class="font-semibold text-gray-700 border-b pb-2 pt-4">Location</h3>
+
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Country</label>
+                    <select id="country" class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500">
+                    </select>
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">City</label>
+                    <select id="city" class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500">
+                    </select>
+                </div>
+
+                <h3 class="font-semibold text-gray-700 border-b pb-2 pt-4">Financial</h3>
+
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Monthly income</label>
+                        <input type="number" id="income" value="8000" min="0"
+                               class="w-full px-4 py-2 border rounded-lg">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Monthly expenses</label>
+                        <input type="number" id="expenses" value="2500" min="0"
+                               class="w-full px-4 py-2 border rounded-lg">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Monthly debt</label>
+                        <input type="number" id="monthly_debt" value="500" min="0"
+                               class="w-full px-4 py-2 border rounded-lg">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Savings</label>
+                        <input type="number" id="savings" value="50000" min="0"
+                               class="w-full px-4 py-2 border rounded-lg">
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Currency</label>
+                    <select id="currency" class="w-full px-4 py-2 border rounded-lg">
+                    </select>
+                </div>
+            </div>
+
+            <!-- RIGHT COLUMN -->
+            <div class="space-y-4">
+                <h3 class="font-semibold text-gray-700 border-b pb-2">Professional</h3>
+
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Sector</label>
+                    <select id="sector" class="w-full px-4 py-2 border rounded-lg">
+                    </select>
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Profession</label>
+                    <select id="profession" class="w-full px-4 py-2 border rounded-lg">
+                    </select>
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Employment status</label>
+                    <select id="employment_status" class="w-full px-4 py-2 border rounded-lg">
+                    </select>
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Weekly hours for business</label>
+                    <select id="weekly_hours" class="w-full px-4 py-2 border rounded-lg">
+                    </select>
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">
+                        Interests <span class="text-gray-400 text-xs">(click to select)</span>
+                    </label>
+                    <div id="interests-chips" class="flex flex-wrap gap-2 mb-2 max-h-40 overflow-y-auto p-2 bg-gray-50 rounded-lg">
+                    </div>
+                    <input type="text" id="custom_interest" placeholder="Add custom interest + Enter"
+                           class="w-full px-3 py-1 border rounded-lg text-sm">
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">
+                        Prior experience <span class="text-gray-400 text-xs">(optional, max 500 chars)</span>
+                    </label>
+                    <textarea id="prior_experience" rows="2" maxlength="500"
+                              placeholder="e.g. I ran a startup for 2 years..."
+                              class="w-full px-3 py-2 border rounded-lg text-sm"></textarea>
+                </div>
+
+                <h3 class="font-semibold text-gray-700 border-b pb-2 pt-4">Preferences</h3>
+
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Risk tolerance</label>
+                        <select id="risk_profile" class="w-full px-4 py-2 border rounded-lg">
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Investment horizon</label>
+                        <select id="horizon" class="w-full px-4 py-2 border rounded-lg">
+                        </select>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <button id="analyze-btn"
+                class="mt-8 w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 px-6 rounded-lg shadow-lg transition">
+            🚀 Analyze my profile
+        </button>
+    </section>
+
+    <!-- ═══════════════ SECTION 2: RESULTS ═══════════════ -->
+    <section id="loading-section" class="hidden bg-white rounded-2xl shadow-lg p-12 mb-6 text-center">
+        <div class="loading-spinner"></div>
+        <p class="mt-4 text-gray-600">Agents analyzing your profile... (5-15 seconds)</p>
+    </section>
+
+    <section id="results-section" class="hidden">
+
+        <!-- Risk + Loan summary -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+            <div class="bg-white rounded-2xl shadow-lg p-6">
+                <h3 class="text-lg font-bold text-gray-800 mb-4">📊 Your risk profile</h3>
+                <div id="risk-content"></div>
+            </div>
+            <div class="bg-white rounded-2xl shadow-lg p-6">
+                <h3 class="text-lg font-bold text-gray-800 mb-4">💰 Maximum loan offer</h3>
+                <div id="loan-content"></div>
+            </div>
+        </div>
+
+        <!-- Strategies -->
+        <div class="bg-white rounded-2xl shadow-lg p-6 mb-6">
+            <h3 class="text-lg font-bold text-gray-800 mb-4">🎯 Investment strategies</h3>
+            <div id="strategies-content" class="grid grid-cols-1 md:grid-cols-3 gap-4"></div>
+        </div>
+
+        <!-- Recommendation + reasoning -->
+        <div class="bg-gradient-to-br from-green-50 to-blue-50 rounded-2xl shadow-lg p-6 mb-6 border-2 border-green-300">
+            <h3 class="text-lg font-bold text-gray-800 mb-4">⭐ Our recommendation</h3>
+            <div id="recommendation-content"></div>
+        </div>
+
+        <!-- ═══════════════ SECTION 3: SIMULATOR ═══════════════ -->
+        <div class="bg-white rounded-2xl shadow-lg p-6 mb-6 border-2 border-blue-200">
+            <h3 class="text-xl font-bold text-gray-800 mb-2">🎛️ Custom simulator</h3>
+            <p class="text-sm text-gray-600 mb-6">Adjust parameters and see how the recommendations change</p>
+
+            <div class="space-y-6">
+                <div>
+                    <div class="flex justify-between mb-2">
+                        <label class="font-semibold">Loan amount</label>
+                        <span id="loan-amount-value" class="text-blue-600 font-bold">$0</span>
+                    </div>
+                    <input type="range" id="sim-loan-amount" min="0" max="100000" step="1000" value="50000"
+                           class="w-full">
+                    <div class="flex justify-between text-xs text-gray-500 mt-1">
+                        <span>$0 (no loan)</span>
+                        <span id="loan-max-label">Max</span>
+                    </div>
+                </div>
+
+                <div>
+                    <div class="flex justify-between mb-2">
+                        <label class="font-semibold">Repayment period</label>
+                        <span id="loan-years-value" class="text-blue-600 font-bold">5 years</span>
+                    </div>
+                    <input type="range" id="sim-loan-years" min="1" max="7" value="5"
+                           class="w-full">
+                </div>
+
+                <div>
+                    <div class="flex justify-between mb-2">
+                        <label class="font-semibold">Savings to invest</label>
+                        <span id="savings-value" class="text-blue-600 font-bold">$0</span>
+                    </div>
+                    <input type="range" id="sim-savings" min="0" max="50000" step="500" value="30000"
+                           class="w-full">
+                    <div class="flex justify-between text-xs text-gray-500 mt-1">
+                        <span>$0 (all in reserve)</span>
+                        <span id="savings-max-label">Max</span>
+                    </div>
+                </div>
+
+                <!-- Live calculation preview -->
+                <div class="bg-blue-50 rounded-lg p-4">
+                    <div class="grid grid-cols-2 gap-3 text-sm">
+                        <div>
+                            <span class="text-gray-600">Monthly payment:</span>
+                            <span id="preview-monthly" class="float-right font-bold">$0</span>
+                        </div>
+                        <div>
+                            <span class="text-gray-600">Total to invest:</span>
+                            <span id="preview-total" class="float-right font-bold">$0</span>
+                        </div>
+                    </div>
+                </div>
+
+                <button id="simulate-btn"
+                        class="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-3 px-6 rounded-lg shadow-lg transition">
+                    🔄 Run simulation
+                </button>
+            </div>
+        </div>
+
+        <div id="simulation-loading" class="hidden bg-white rounded-2xl shadow-lg p-12 mb-6 text-center">
+            <div class="loading-spinner"></div>
+            <p class="mt-4 text-gray-600">Computing new strategy...</p>
+        </div>
+
+        <div id="simulation-results" class="hidden bg-white rounded-2xl shadow-lg p-6 mb-6">
+            <h3 class="text-lg font-bold text-gray-800 mb-4">🎯 Custom result</h3>
+            <div id="simulation-content"></div>
+        </div>
+    </section>
+</div>
+
+<script>
+const API_BASE = '';  // empty = same origin (FastAPI serves both frontend and API)
+let OPTIONS = null;
+let currentUserData = null;
+let currentAnalyzeResult = null;
+
+// ═══════════════ INIT ═══════════════
+async function init() {
+    try {
+        const res = await fetch(`${API_BASE}/options`);
+        if (!res.ok) throw new Error('Server unavailable');
+        OPTIONS = await res.json();
+        populateDropdowns();
+        renderInterests();
+        document.getElementById('form-section').classList.remove('hidden');
+        document.getElementById('api-status').classList.add('hidden');
+    } catch (e) {
+        document.getElementById('api-status').textContent = '❌ Server unavailable';
+        document.getElementById('api-status').className = 'mb-4 p-3 rounded-lg text-center text-sm bg-red-100 text-red-800';
+    }
+}
+
+// ═══════════════ POPULATE DROPDOWNS ═══════════════
+function fillSelect(id, items, formatter = i => i) {
+    const sel = document.getElementById(id);
+    sel.innerHTML = items.map(i => `<option value="${formatter(i)}">${formatter(i)}</option>`).join('');
+}
+
+function populateDropdowns() {
+    document.getElementById('country').innerHTML =
+        OPTIONS.countries.map(c => `<option value="${c.code}">${c.name} (${c.code})</option>`).join('');
+
+    fillSelect('currency', OPTIONS.currencies);
+    fillSelect('sector', OPTIONS.sectors);
+    fillSelect('profession', OPTIONS.professions);
+    fillSelect('employment_status', OPTIONS.employment_statuses);
+    fillSelect('risk_profile', OPTIONS.risk_profiles);
+    fillSelect('horizon', OPTIONS.horizons);
+    fillSelect('weekly_hours', OPTIONS.weekly_hours);
+
+    document.getElementById('country').addEventListener('change', updateCities);
+    updateCities();
+}
+
+function updateCities() {
+    const country = document.getElementById('country').value;
+    const cities = OPTIONS.cities_by_country[country] || [];
+    fillSelect('city', cities);
+}
+
+// ═══════════════ INTERESTS CHIPS ═══════════════
+function renderInterests() {
+    const container = document.getElementById('interests-chips');
+    container.innerHTML = OPTIONS.predefined_interests.map(i =>
+        `<span class="interest-chip px-3 py-1 bg-gray-200 rounded-full text-sm" data-value="${i}">${i}</span>`
+    ).join('');
+
+    container.querySelectorAll('.interest-chip').forEach(chip => {
+        chip.addEventListener('click', () => chip.classList.toggle('selected'));
+    });
+
+    document.getElementById('custom_interest').addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            const val = e.target.value.trim();
+            if (val) {
+                const chip = document.createElement('span');
+                chip.className = 'interest-chip selected px-3 py-1 rounded-full text-sm';
+                chip.dataset.value = val;
+                chip.textContent = val + ' ×';
+                chip.onclick = () => chip.remove();
+                container.appendChild(chip);
+                e.target.value = '';
+            }
+        }
+    });
+}
+
+function getSelectedInterests() {
+    return [...document.querySelectorAll('.interest-chip.selected')]
+        .map(c => c.dataset.value);
+}
+
+// ═══════════════ BUILD USER DATA ═══════════════
+function buildUserPayload() {
+    return {
+        personal: { age: parseInt(document.getElementById('age').value) },
+        location: {
+            country: document.getElementById('country').value,
+            city: document.getElementById('city').value
+        },
+        financial: {
+            income: parseInt(document.getElementById('income').value),
+            expenses: parseInt(document.getElementById('expenses').value),
+            monthly_debt: parseInt(document.getElementById('monthly_debt').value),
+            savings: parseInt(document.getElementById('savings').value),
+            currency: document.getElementById('currency').value
+        },
+        professional: {
+            sector: document.getElementById('sector').value,
+            profession: document.getElementById('profession').value,
+            employment_status: document.getElementById('employment_status').value,
+            interests: getSelectedInterests(),
+            prior_experience: document.getElementById('prior_experience').value,
+            weekly_hours: document.getElementById('weekly_hours').value
+        },
+        preferences: {
+            risk_profile: document.getElementById('risk_profile').value,
+            horizon: document.getElementById('horizon').value
+        }
+    };
+}
+
+// ═══════════════ ANALYZE ═══════════════
+document.getElementById('analyze-btn').addEventListener('click', async () => {
+    currentUserData = buildUserPayload();
+
+    document.getElementById('form-section').classList.add('hidden');
+    document.getElementById('loading-section').classList.remove('hidden');
+
+    try {
+        const res = await fetch(`${API_BASE}/analyze`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(currentUserData)
+        });
+
+        if (!res.ok) {
+            const err = await res.json();
+            throw new Error(JSON.stringify(err.detail));
+        }
+
+        currentAnalyzeResult = await res.json();
+        renderResults(currentAnalyzeResult);
+        configureSimulator(currentAnalyzeResult);
+    } catch (e) {
+        alert('Error: ' + e.message);
+        document.getElementById('form-section').classList.remove('hidden');
+    } finally {
+        document.getElementById('loading-section').classList.add('hidden');
+    }
+});
+
+// ═══════════════ RENDER RESULTS ═══════════════
+function renderResults(data) {
+    document.getElementById('results-section').classList.remove('hidden');
+
+    // Risk
+    document.getElementById('risk-content').innerHTML = `
+        <div class="space-y-2 text-sm">
+            <div class="flex justify-between">
+                <span class="text-gray-600">Your preference:</span>
+                <span class="font-bold">${data.user_summary.risk_profile.toUpperCase()}</span>
+            </div>
+            <div class="flex justify-between">
+                <span class="text-gray-600">Creditworthiness:</span>
+                <span class="font-bold text-green-600">${data.risk.creditworthiness.toUpperCase()}</span>
+            </div>
+            <div class="flex justify-between">
+                <span class="text-gray-600">Score:</span>
+                <span class="font-bold">${data.risk.score}/15</span>
+            </div>
+            <p class="text-xs text-gray-500 mt-3 italic">${data.risk.explanation}</p>
+        </div>`;
+
+    // Loan
+    if (data.loan.approved) {
+        document.getElementById('loan-content').innerHTML = `
+            <div class="space-y-2 text-sm">
+                <div class="flex justify-between"><span class="text-gray-600">Max amount:</span>
+                    <span class="font-bold text-2xl text-green-600">${formatMoney(data.loan.max_loan_amount, data.user_summary.currency)}</span></div>
+                <div class="flex justify-between"><span>Monthly payment:</span><span class="font-bold">${formatMoney(data.loan.monthly_payment, data.user_summary.currency)}</span></div>
+                <div class="flex justify-between"><span>Duration:</span><span class="font-bold">${data.loan.loan_years} years</span></div>
+                <div class="flex justify-between"><span>Interest rate:</span><span class="font-bold">${(data.loan.interest_rate*100).toFixed(2)}%</span></div>
+            </div>`;
+    } else {
+        document.getElementById('loan-content').innerHTML = `
+            <div class="text-red-600 font-bold">❌ Loan not approved</div>
+            <div class="text-sm text-gray-600 mt-2">${data.loan.reason || ''}</div>`;
+    }
+
+    // Strategies
+    document.getElementById('strategies-content').innerHTML =
+        data.strategies.map(s => renderStrategyCard(s, data.user_summary.currency)).join('');
+
+    // Recommendation
+    if (data.recommendation) {
+        document.getElementById('recommendation-content').innerHTML = `
+            <h4 class="text-xl font-bold text-green-700 mb-2">${data.recommendation.title}</h4>
+            <p class="text-gray-700 mb-4">${data.reasoning}</p>
+            <div class="bg-white rounded-lg p-4 border-2 border-green-200">
+                <p class="font-semibold text-sm">📌 Next step:</p>
+                <p class="text-sm text-gray-700">${data.next_step}</p>
+            </div>`;
+    } else {
+        document.getElementById('recommendation-content').innerHTML = `
+            <p class="text-red-600">${data.reasoning}</p>`;
+    }
+}
+
+// ═══════════════ STRATEGY CARD (RICH VERSION) ═══════════════
+function renderStrategyCard(s, currency) {
+    const statusColor = {
+        'profitable': 'bg-green-100 text-green-800 border-green-300',
+        'not_profitable': 'bg-red-100 text-red-800 border-red-300',
+        'no_loan': 'bg-gray-100 text-gray-800 border-gray-300'
+    }[s.status] || 'bg-gray-100';
+
+    const agentEmoji = { 'business': '💼', 'real_estate': '🏠', 'stock': '📈' }[s.agent] || '📊';
+    const agentLabel = { 'business': 'Business', 'real_estate': 'Real Estate', 'stock': 'Stock Portfolio' }[s.agent] || s.agent;
+
+    const typeBadge = s.type
+        ? `<span class="text-xs px-2 py-0.5 bg-blue-100 text-blue-700 rounded">${s.type}</span>`
+        : '';
+
+    const allocationHTML = renderAllocation(s.allocation, currency);
+    const cardId = `card-${s.agent}-${Math.random().toString(36).substr(2, 9)}`;
+
+    return `
+        <div class="strategy-card border-2 rounded-xl bg-white overflow-hidden">
+            <!-- HEADER -->
+            <div class="p-4 border-b">
+                <div class="flex justify-between items-start mb-2 gap-2">
+                    <div class="flex-1">
+                        <div class="flex items-center gap-2 mb-1">
+                            <span class="text-xs text-gray-500 uppercase font-semibold">${agentLabel}</span>
+                            ${typeBadge}
+                        </div>
+                        <h4 class="font-bold text-gray-800 text-base leading-tight">
+                            ${agentEmoji} ${s.title || s.agent}
+                        </h4>
+                    </div>
+                    <span class="text-xs px-2 py-1 rounded border ${statusColor} whitespace-nowrap font-medium">
+                        ${s.status}
+                    </span>
+                </div>
+                <p class="text-sm text-gray-600 mt-2">${s.description || ''}</p>
+            </div>
+
+            <!-- KEY METRICS -->
+            <div class="p-4 bg-gray-50 grid grid-cols-2 gap-3 text-sm">
+                <div>
+                    <div class="text-xs text-gray-500">📊 Real return</div>
+                    <div class="font-bold text-base">${(s.real_return*100).toFixed(2)}%</div>
+                </div>
+                <div>
+                    <div class="text-xs text-gray-500">💰 Net return</div>
+                    <div class="font-bold text-base ${s.net_return >= 0 ? 'text-green-600' : 'text-red-600'}">
+                        ${(s.net_return*100).toFixed(2)}%
+                    </div>
+                </div>
+                <div>
+                    <div class="text-xs text-gray-500">⚡ Risk</div>
+                    <div class="font-bold">${(s.risk*100).toFixed(0)}%</div>
+                    <div class="w-full bg-gray-200 rounded-full h-1.5 mt-1">
+                        <div class="bg-orange-500 h-1.5 rounded-full" style="width: ${s.risk*100}%"></div>
+                    </div>
+                </div>
+                <div>
+                    <div class="text-xs text-gray-500">🛡️ Stability</div>
+                    <div class="font-bold">${(s.stability*100).toFixed(0)}%</div>
+                    <div class="w-full bg-gray-200 rounded-full h-1.5 mt-1">
+                        <div class="bg-blue-500 h-1.5 rounded-full" style="width: ${s.stability*100}%"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- TIME TO PROFIT -->
+            ${s.time_to_profit ? `
+                <div class="px-4 py-2 bg-yellow-50 border-t text-xs">
+                    ⏱️ <span class="text-gray-600">Time to profit:</span>
+                    <span class="font-semibold">${s.time_to_profit}</span>
+                </div>
+            ` : ''}
+
+            <!-- TOGGLE DETAILS BUTTON -->
+            <button onclick="document.getElementById('${cardId}').classList.toggle('hidden')"
+                    class="w-full px-4 py-2 text-sm text-blue-600 hover:bg-blue-50 border-t font-medium transition">
+                Show details ▼
+            </button>
+
+            <!-- EXPANDED DETAILS -->
+            <div id="${cardId}" class="hidden p-4 border-t space-y-4 bg-gray-50">
+
+                <!-- ALLOCATION -->
+                <div>
+                    <h5 class="font-semibold text-sm text-gray-700 mb-2">💰 Capital allocation</h5>
+                    ${allocationHTML}
+                </div>
+
+                <!-- PROS -->
+                ${s.pros && s.pros.length ? `
+                    <div>
+                        <h5 class="font-semibold text-sm text-green-700 mb-2">✅ Pros</h5>
+                        <ul class="space-y-1 text-xs text-gray-700">
+                            ${s.pros.map(p => `<li class="flex gap-1"><span class="text-green-600">▸</span><span>${p}</span></li>`).join('')}
+                        </ul>
+                    </div>
+                ` : ''}
+
+                <!-- CONS -->
+                ${s.cons && s.cons.length ? `
+                    <div>
+                        <h5 class="font-semibold text-sm text-red-700 mb-2">⚠️ Cons</h5>
+                        <ul class="space-y-1 text-xs text-gray-700">
+                            ${s.cons.map(c => `<li class="flex gap-1"><span class="text-red-600">▸</span><span>${c}</span></li>`).join('')}
+                        </ul>
+                    </div>
+                ` : ''}
+
+                <!-- NEXT STEPS -->
+                ${s.next_steps && s.next_steps.length ? `
+                    <div>
+                        <h5 class="font-semibold text-sm text-blue-700 mb-2">🎯 Next steps</h5>
+                        <ol class="space-y-1 text-xs text-gray-700 list-decimal list-inside">
+                            ${s.next_steps.map(n => `<li>${n}</li>`).join('')}
+                        </ol>
+                    </div>
+                ` : ''}
+
+                <!-- WARNING -->
+                ${s.warning ? `
+                    <div class="bg-yellow-100 border-l-4 border-yellow-500 p-3 text-xs text-yellow-800">
+                        ⚠️ ${s.warning}
+                    </div>
+                ` : ''}
+
+                <!-- SCORES -->
+                <div class="pt-2 border-t flex justify-between text-xs text-gray-500">
+                    <span>Score: <strong>${(s.score || 0).toFixed(4)}</strong></span>
+                    ${s.personalized_score ? `<span>Personalized: <strong>${s.personalized_score.toFixed(4)}</strong></span>` : ''}
+                </div>
+            </div>
+        </div>`;
+}
+
+// ═══════════════ ALLOCATION RENDERING ═══════════════
+function renderAllocation(allocation, currency) {
+    if (!allocation || Object.keys(allocation).length === 0) {
+        return '<p class="text-xs text-gray-500 italic">No allocation data</p>';
+    }
+
+    const entries = Object.entries(allocation);
+    const firstVal = entries[0][1];
+    const isPercentage = typeof firstVal === 'string' && firstVal.includes('%');
+
+    const total = isPercentage
+        ? 100
+        : entries.reduce((sum, [, v]) => sum + (typeof v === 'number' ? v : 0), 0);
+
+    return `
+        <div class="space-y-2">
+            ${entries.map(([key, val]) => {
+                let displayValue, percentage;
+
+                if (isPercentage) {
+                    displayValue = val;
+                    percentage = parseFloat(val);
+                } else {
+                    const numVal = typeof val === 'number' ? val : 0;
+                    displayValue = formatMoney(numVal, currency);
+                    percentage = total > 0 ? (numVal / total * 100) : 0;
+                }
+
+                const colors = {
+                    'down_payment': 'bg-blue-500',
+                    'initial_investment': 'bg-blue-500',
+                    'working_capital': 'bg-green-500',
+                    'marketing_budget': 'bg-purple-500',
+                    'reserve': 'bg-yellow-500',
+                    'emergency_fund': 'bg-yellow-500',
+                    'taxes_and_fees': 'bg-red-400',
+                    'renovation_reserve': 'bg-orange-400',
+                };
+                const color = colors[key] || 'bg-gray-400';
+
+                const prettyKey = key
+                    .replace(/_/g, ' ')
+                    .replace(/\b\w/g, c => c.toUpperCase());
+
+                return `
+                    <div>
+                        <div class="flex justify-between text-xs mb-1">
+                            <span class="text-gray-700">${prettyKey}</span>
+                            <span class="font-semibold">${displayValue}</span>
+                        </div>
+                        <div class="w-full bg-gray-200 rounded-full h-2">
+                            <div class="${color} h-2 rounded-full transition-all" style="width: ${percentage}%"></div>
+                        </div>
+                    </div>
+                `;
+            }).join('')}
+            ${!isPercentage ? `
+                <div class="pt-2 border-t mt-2 flex justify-between text-xs">
+                    <span class="font-semibold text-gray-700">Total:</span>
+                    <span class="font-bold">${formatMoney(total, currency)}</span>
+                </div>
+            ` : ''}
+        </div>
+    `;
+}
+
+function formatMoney(amount, currency) {
+    const symbol = { 'USD': '$', 'EUR': '€' }[currency] || currency;
+    return `${symbol}${(amount || 0).toLocaleString('en-US', { maximumFractionDigits: 2 })}`;
+}
+
+// ═══════════════ SIMULATOR ═══════════════
+function configureSimulator(data) {
+    const maxLoan = data.loan.approved ? data.loan.max_loan_amount : 0;
+    const maxYears = data.loan.approved ? data.loan.loan_years : 7;
+    const maxSavings = data.user_summary.savings;
+    const currency = data.user_summary.currency;
+
+    const loanSlider = document.getElementById('sim-loan-amount');
+    loanSlider.max = maxLoan;
+    loanSlider.value = Math.min(maxLoan / 2, maxLoan);
+    document.getElementById('loan-max-label').textContent = formatMoney(maxLoan, currency);
+
+    const yearsSlider = document.getElementById('sim-loan-years');
+    yearsSlider.max = maxYears;
+    yearsSlider.value = Math.min(5, maxYears);
+
+    const savingsSlider = document.getElementById('sim-savings');
+    savingsSlider.max = maxSavings;
+    savingsSlider.value = Math.min(maxSavings * 0.6, maxSavings);
+    document.getElementById('savings-max-label').textContent = formatMoney(maxSavings, currency);
+
+    [loanSlider, yearsSlider, savingsSlider].forEach(s => s.addEventListener('input', updateSliderDisplay));
+    updateSliderDisplay();
+}
+
+function updateSliderDisplay() {
+    const currency = currentAnalyzeResult.user_summary.currency;
+    const loan = parseFloat(document.getElementById('sim-loan-amount').value);
+    const years = parseInt(document.getElementById('sim-loan-years').value);
+    const savings = parseFloat(document.getElementById('sim-savings').value);
+    const rate = currentAnalyzeResult.loan.interest_rate || 0;
+
+    document.getElementById('loan-amount-value').textContent = formatMoney(loan, currency);
+    document.getElementById('loan-years-value').textContent = `${years} years`;
+    document.getElementById('savings-value').textContent = formatMoney(savings, currency);
+
+    let monthly = 0;
+    if (loan > 0 && rate > 0) {
+        const months = years * 12;
+        const monthlyRate = rate / 12;
+        monthly = loan * monthlyRate * Math.pow(1 + monthlyRate, months) / (Math.pow(1 + monthlyRate, months) - 1);
+    }
+    document.getElementById('preview-monthly').textContent = formatMoney(monthly, currency);
+    document.getElementById('preview-total').textContent = formatMoney(loan + savings, currency);
+}
+
+// ═══════════════ SIMULATE ═══════════════
+document.getElementById('simulate-btn').addEventListener('click', async () => {
+    document.getElementById('simulation-loading').classList.remove('hidden');
+    document.getElementById('simulation-results').classList.add('hidden');
+
+    const payload = {
+        user: currentUserData,
+        simulation: {
+            loan_amount: parseFloat(document.getElementById('sim-loan-amount').value),
+            loan_years: parseInt(document.getElementById('sim-loan-years').value),
+            savings_to_invest: parseFloat(document.getElementById('sim-savings').value)
+        }
+    };
+
+    try {
+        const res = await fetch(`${API_BASE}/simulate`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+
+        if (!res.ok) {
+            const err = await res.json();
+            throw new Error(JSON.stringify(err.detail));
+        }
+
+        const data = await res.json();
+        renderSimulation(data);
+    } catch (e) {
+        alert('Error: ' + e.message);
+    } finally {
+        document.getElementById('simulation-loading').classList.add('hidden');
+    }
+});
+
+function renderSimulation(data) {
+    const currency = data.user_summary.currency;
+    const sim = data.simulation;
+
+    document.getElementById('simulation-results').classList.remove('hidden');
+    document.getElementById('simulation-content').innerHTML = `
+        <div class="bg-blue-50 rounded-lg p-4 mb-4">
+            <h4 class="font-bold mb-2">📊 Your parameters</h4>
+            <div class="grid grid-cols-2 gap-2 text-sm">
+                <div>Loan: <strong>${formatMoney(sim.user_chose.loan_amount, currency)}</strong></div>
+                <div>Period: <strong>${sim.user_chose.loan_years} yrs</strong></div>
+                <div>Investment from savings: <strong>${formatMoney(sim.user_chose.savings_to_invest, currency)}</strong></div>
+                <div>Buffer: <strong>${formatMoney(sim.calculated.savings_kept_as_buffer, currency)}</strong></div>
+                <div>Monthly payment: <strong>${formatMoney(sim.calculated.monthly_payment, currency)}</strong></div>
+                <div>Total invested: <strong class="text-green-600">${formatMoney(sim.calculated.total_capital_invested, currency)}</strong></div>
+            </div>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+            ${data.strategies.map(s => renderStrategyCard(s, currency)).join('')}
+        </div>
+        ${data.recommendation ? `
+            <div class="bg-green-50 rounded-lg p-4 border-2 border-green-300">
+                <h4 class="font-bold text-green-700 mb-2">⭐ Recommendation: ${data.recommendation.title}</h4>
+                <p class="text-sm text-gray-700">${data.reasoning}</p>
+            </div>
+        ` : ''}
+    `;
+
+    document.getElementById('simulation-results').scrollIntoView({ behavior: 'smooth' });
+}
+
+init();
+</script>
+
+</body>
+</html>
