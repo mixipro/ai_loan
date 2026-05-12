@@ -1,343 +1,100 @@
 # app/models/user.py
 
 from pydantic import BaseModel, Field, model_validator
-from typing import List
+from typing import List, Optional
 from enum import Enum
-
+from app.core.california_config import (
+    CaliforniaRegion, REGION_DATA,
+    get_cities_for_region, find_region_for_city
+)
 
 # ─────────────────────────────────────────
-# 🌍 LOCATION
+# 🌴 CALIFORNIA LOCATION
 # ─────────────────────────────────────────
 
-class Country(str, Enum):
-    USA          = "US"
-    GERMANY      = "DE"
-    JAPAN        = "JP"
-    INDIA        = "IN"
-    UK           = "GB"
-    FRANCE       = "FR"
-    ITALY        = "IT"
-    BRAZIL       = "BR"
-    CANADA       = "CA"
-    RUSSIA       = "RU"
-    SOUTH_KOREA  = "KR"
-    AUSTRALIA    = "AU"
-    SPAIN        = "ES"
-    MEXICO       = "MX"
-    INDONESIA    = "ID"
-    NETHERLANDS  = "NL"
-    SAUDI_ARABIA = "SA"
-    TURKEY       = "TR"
-    SWITZERLAND  = "CH"
-    SERBIA       = "RS"
-
-
-CITIES_BY_COUNTRY: dict[str, list[str]] = {
-    "US": [
-        "New York", "Los Angeles", "Chicago", "Houston", "Phoenix",
-        "Philadelphia", "San Antonio", "San Diego", "Dallas", "San Jose",
-        "Austin", "Jacksonville", "Fort Worth", "Columbus", "Charlotte",
-        "Indianapolis", "San Francisco", "Seattle", "Denver", "Nashville",
-        "Oklahoma City", "El Paso", "Washington", "Boston", "Memphis",
-        "Louisville", "Portland", "Las Vegas", "Baltimore", "Milwaukee",
-        "Albuquerque", "Tucson", "Fresno", "Sacramento", "Kansas City",
-        "Mesa", "Atlanta", "Omaha", "Colorado Springs", "Raleigh",
-        "Long Beach", "Virginia Beach", "Minneapolis", "Tampa", "New Orleans",
-        "Arlington", "Bakersfield", "Honolulu", "Anaheim", "Aurora", "Miami",
-    ],
-    "DE": [
-        "Berlin", "Hamburg", "Munich", "Cologne", "Frankfurt",
-        "Stuttgart", "Düsseldorf", "Leipzig", "Dortmund", "Essen",
-        "Bremen", "Dresden", "Hanover", "Nuremberg", "Duisburg",
-        "Bochum", "Wuppertal", "Bielefeld", "Bonn", "Münster",
-        "Karlsruhe", "Mannheim", "Augsburg", "Wiesbaden", "Gelsenkirchen",
-        "Mönchengladbach", "Braunschweig", "Kiel", "Chemnitz", "Aachen",
-        "Halle", "Magdeburg", "Freiburg", "Krefeld", "Lübeck",
-        "Oberhausen", "Erfurt", "Mainz", "Rostock", "Kassel",
-        "Hagen", "Hamm", "Saarbrücken", "Mülheim", "Potsdam",
-        "Ludwigshafen", "Oldenburg", "Leverkusen", "Osnabrück", "Solingen",
-    ],
-    "JP": [
-        "Tokyo", "Yokohama", "Osaka", "Nagoya", "Sapporo",
-        "Fukuoka", "Kobe", "Kawasaki", "Kyoto", "Saitama",
-        "Hiroshima", "Sendai", "Kitakyushu", "Chiba", "Sakai",
-        "Niigata", "Hamamatsu", "Shizuoka", "Sagamihara", "Okayama",
-        "Kumamoto", "Kagoshima", "Funabashi", "Hachioji", "Higashiosaka",
-        "Matsuyama", "Utsunomiya", "Matsudo", "Nishinomiya", "Kanazawa",
-        "Oita", "Kurashiki", "Yokosuka", "Nagasaki", "Kawaguchi",
-        "Himeji", "Ichikawa", "Amagasaki", "Nara", "Suita",
-        "Toyama", "Toyonaka", "Wakayama", "Asahikawa", "Takatsuki",
-        "Iwaki", "Koriyama", "Hakodate", "Nagano", "Akita",
-    ],
-    "IN": [
-        "Mumbai", "Delhi", "Bangalore", "Hyderabad", "Ahmedabad",
-        "Chennai", "Kolkata", "Surat", "Pune", "Jaipur",
-        "Lucknow", "Kanpur", "Nagpur", "Indore", "Thane",
-        "Bhopal", "Visakhapatnam", "Pimpri-Chinchwad", "Patna", "Vadodara",
-        "Ghaziabad", "Ludhiana", "Agra", "Nashik", "Faridabad",
-        "Meerut", "Rajkot", "Varanasi", "Srinagar", "Aurangabad",
-        "Dhanbad", "Amritsar", "Navi Mumbai", "Allahabad", "Ranchi",
-        "Howrah", "Coimbatore", "Jabalpur", "Gwalior", "Vijayawada",
-        "Jodhpur", "Madurai", "Raipur", "Kota", "Chandigarh",
-        "Guwahati", "Solapur", "Hubballi", "Tiruchirappalli", "Mysore",
-    ],
-    "GB": [
-        "London", "Birmingham", "Manchester", "Leeds", "Glasgow",
-        "Sheffield", "Bradford", "Edinburgh", "Liverpool", "Bristol",
-        "Cardiff", "Coventry", "Nottingham", "Leicester", "Sunderland",
-        "Belfast", "Newcastle", "Brighton", "Hull", "Plymouth",
-        "Stoke-on-Trent", "Wolverhampton", "Derby", "Swansea", "Southampton",
-        "Salford", "Aberdeen", "Westminster", "Portsmouth", "York",
-        "Peterborough", "Dundee", "Lancaster", "Oxford", "Newport",
-        "Preston", "St Albans", "Norwich", "Chester", "Cambridge",
-        "Salisbury", "Exeter", "Gloucester", "Lincoln", "Bath",
-        "Worcester", "Canterbury", "Hereford", "Truro", "Ripon",
-    ],
-    "FR": [
-        "Paris", "Marseille", "Lyon", "Toulouse", "Nice",
-        "Nantes", "Montpellier", "Strasbourg", "Bordeaux", "Lille",
-        "Rennes", "Reims", "Saint-Étienne", "Toulon", "Le Havre",
-        "Grenoble", "Dijon", "Angers", "Nîmes", "Villeurbanne",
-        "Saint-Denis", "Le Mans", "Aix-en-Provence", "Clermont-Ferrand", "Brest",
-        "Limoges", "Tours", "Amiens", "Perpignan", "Metz",
-        "Besançon", "Boulogne-Billancourt", "Orléans", "Mulhouse", "Rouen",
-        "Caen", "Nancy", "Saint-Paul", "Argenteuil", "Montreuil",
-        "Roubaix", "Dunkirk", "Tourcoing", "Avignon", "Poitiers",
-        "Versailles", "Pau", "La Rochelle", "Antibes", "Cannes",
-    ],
-    "IT": [
-        "Rome", "Milan", "Naples", "Turin", "Palermo",
-        "Genoa", "Bologna", "Florence", "Bari", "Catania",
-        "Venice", "Verona", "Messina", "Padua", "Trieste",
-        "Taranto", "Brescia", "Parma", "Prato", "Modena",
-        "Reggio Calabria", "Reggio Emilia", "Perugia", "Livorno", "Ravenna",
-        "Cagliari", "Foggia", "Rimini", "Salerno", "Ferrara",
-        "Sassari", "Latina", "Giugliano", "Monza", "Syracuse",
-        "Bergamo", "Pescara", "Trento", "Forlì", "Vicenza",
-        "Terni", "Bolzano", "Novara", "Piacenza", "Andria",
-        "Ancona", "Arezzo", "Udine", "Cesena", "Lecce",
-    ],
-    "BR": [
-        "São Paulo", "Rio de Janeiro", "Brasília", "Salvador", "Fortaleza",
-        "Belo Horizonte", "Manaus", "Curitiba", "Recife", "Goiânia",
-        "Belém", "Porto Alegre", "Guarulhos", "Campinas", "São Luís",
-        "São Gonçalo", "Maceió", "Duque de Caxias", "Natal", "Teresina",
-        "Campo Grande", "Nova Iguaçu", "Santo André", "São Bernardo do Campo", "João Pessoa",
-        "Osasco", "Jaboatão dos Guararapes", "Contagem", "Ribeirão Preto", "São José dos Campos",
-        "Uberlândia", "Sorocaba", "Cuiabá", "Aracaju", "Feira de Santana",
-        "Joinville", "Aparecida de Goiânia", "Londrina", "Ananindeua", "Porto Velho",
-        "Serra", "Niterói", "Caxias do Sul", "Macapá", "Florianópolis",
-        "Vila Velha", "Mogi das Cruzes", "Belford Roxo", "Santos", "Betim",
-    ],
-    "CA": [
-        "Toronto", "Montreal", "Vancouver", "Calgary", "Edmonton",
-        "Ottawa", "Winnipeg", "Quebec City", "Hamilton", "Kitchener",
-        "London", "Victoria", "Halifax", "Oshawa", "Windsor",
-        "Saskatoon", "Regina", "St. Catharines", "Barrie", "Kelowna",
-        "Abbotsford", "Sherbrooke", "Saguenay", "Lévis", "Trois-Rivières",
-        "Kingston", "Guelph", "Burnaby", "Delta", "Richmond",
-        "Sudbury", "Moncton", "Red Deer", "Lethbridge", "Kamloops",
-        "Nanaimo", "Brantford", "Saint John", "Thunder Bay", "Whitby",
-        "Chatham", "Surrey", "Laval", "Longueuil", "Oakville",
-        "Brampton", "Markham", "Vaughan", "Mississauga", "Richmond Hill",
-    ],
-    "RU": [
-        "Moscow", "Saint Petersburg", "Novosibirsk", "Yekaterinburg", "Kazan",
-        "Nizhny Novgorod", "Chelyabinsk", "Samara", "Ufa", "Rostov-on-Don",
-        "Omsk", "Krasnoyarsk", "Voronezh", "Perm", "Volgograd",
-        "Krasnodar", "Saratov", "Tyumen", "Tolyatti", "Izhevsk",
-        "Barnaul", "Ulyanovsk", "Irkutsk", "Khabarovsk", "Yaroslavl",
-        "Vladivostok", "Makhachkala", "Tomsk", "Orenburg", "Novokuznetsk",
-        "Kemerovo", "Ryazan", "Astrakhan", "Naberezhnye Chelny", "Penza",
-        "Lipetsk", "Kirov", "Tula", "Cheboksary", "Kaliningrad",
-        "Balashikha", "Kursk", "Magnitogorsk", "Ulan-Ude", "Tver",
-        "Stavropol", "Nizhny Tagil", "Bryansk", "Ivanovo", "Krasnoyarsk",
-    ],
-    "KR": [
-        "Seoul", "Busan", "Incheon", "Daegu", "Daejeon",
-        "Gwangju", "Suwon", "Ulsan", "Changwon", "Seongnam",
-        "Goyang", "Yongin", "Bucheon", "Cheongju", "Ansan",
-        "Anyang", "Namyangju", "Hwaseong", "Jeonju", "Pohang",
-        "Uijeongbu", "Siheung", "Gimhae", "Cheonan", "Yangsan",
-        "Jeju", "Asan", "Gwangmyeong", "Gimpo", "Hanam",
-        "Pyeongtaek", "Gumi", "Iksan", "Wonju", "Andong",
-        "Jinju", "Gunpo", "Mokpo", "Gangneung", "Suncheon",
-        "Yeosu", "Geoje", "Chuncheon", "Gwangyang", "Tongyeong",
-        "Gyeongju", "Jeongeup", "Gunsan", "Sokcho", "Donghae",
-    ],
-    "AU": [
-        "Sydney", "Melbourne", "Brisbane", "Perth", "Adelaide",
-        "Gold Coast", "Canberra", "Hobart", "Geelong", "Newcastle",
-        "Wollongong", "Logan City", "Launceston", "Townsville", "Cairns",
-        "Toowoomba", "Darwin", "Albury", "Ballarat", "Bendigo",
-        "Mackay", "Rockhampton", "Bunbury", "Bundaberg", "Coffs Harbour",
-        "Wagga Wagga", "Hervey Bay", "Shepparton", "Mildura", "Tamworth",
-        "Gladstone", "Sunbury", "Traralgon", "Orange", "Dubbo",
-        "Bowral", "Geraldton", "Busselton", "Nowra", "Bathurst",
-        "Alice Springs", "Warrnambool", "Kalgoorlie", "Devonport", "Lismore",
-        "Mandurah", "Caloundra", "Maroochydore", "Mount Gambier", "Whyalla",
-    ],
-    "ES": [
-        "Madrid", "Barcelona", "Valencia", "Seville", "Zaragoza",
-        "Málaga", "Murcia", "Palma", "Las Palmas", "Bilbao",
-        "Alicante", "Córdoba", "Valladolid", "Vigo", "Gijón",
-        "Hospitalet", "Vitoria-Gasteiz", "La Coruña", "Granada", "Elche",
-        "Oviedo", "Badalona", "Cartagena", "Terrassa", "Jerez",
-        "Sabadell", "Santander", "Pamplona", "Almería", "Fuenlabrada",
-        "Leganés", "San Sebastián", "Burgos", "Castellón", "Alcalá de Henares",
-        "Getafe", "Albacete", "Alcorcón", "Salamanca", "Logroño",
-        "Huelva", "Badajoz", "Tarragona", "Lleida", "Marbella",
-        "León", "Cádiz", "Dos Hermanas", "Tenerife", "Girona",
-    ],
-    "MX": [
-        "Mexico City", "Guadalajara", "Monterrey", "Puebla", "Tijuana",
-        "León", "Ciudad Juárez", "Torreón", "San Luis Potosí", "Mérida",
-        "Mexicali", "Culiacán", "Aguascalientes", "Acapulco", "Hermosillo",
-        "Saltillo", "Morelia", "Naucalpan", "Zapopan", "Chihuahua",
-        "Centro", "Tlalnepantla", "Cancún", "Querétaro", "Chimalhuacán",
-        "San Nicolás de los Garza", "Ecatepec", "Nezahualcóyotl", "Irapuato", "Veracruz",
-        "Guadalupe", "Xalapa", "Oaxaca", "Durango", "Zacatecas",
-        "Tepic", "Colima", "Campeche", "Ciudad Obregón", "Ensenada",
-        "Matamoros", "Mazatlán", "Reynosa", "Cuernavaca", "Tuxtla Gutiérrez",
-        "Toluca", "Villahermosa", "Pachuca", "Tlaxcala", "Chilpancingo",
-    ],
-    "ID": [
-        "Jakarta", "Surabaya", "Bandung", "Bekasi", "Medan",
-        "Tangerang", "Depok", "Semarang", "Palembang", "Makassar",
-        "South Tangerang", "Batam", "Bogor", "Pekanbaru", "Bandar Lampung",
-        "Padang", "Malang", "Samarinda", "Tasikmalaya", "Pontianak",
-        "Banjarmasin", "Balikpapan", "Manado", "Mataram", "Serang",
-        "Yogyakarta", "Jambi", "Kupang", "Denpasar", "Ambon",
-        "Surakarta", "Cimahi", "Kediri", "Bengkulu", "Jayapura",
-        "Palu", "Probolinggo", "Cilegon", "Bitung", "Kendari",
-        "Madiun", "Tarakan", "Dumai", "Ternate", "Sorong",
-        "Lhokseumawe", "Tegal", "Sukabumi", "Blitar", "Pasuruan",
-    ],
-    "NL": [
-        "Amsterdam", "Rotterdam", "The Hague", "Utrecht", "Eindhoven",
-        "Tilburg", "Groningen", "Almere", "Breda", "Nijmegen",
-        "Enschede", "Apeldoorn", "Haarlem", "Arnhem", "Zaanstad",
-        "Amersfoort", "Haarlemmermeer", "Dordrecht", "Zoetermeer", "Leiden",
-        "Maastricht", "Westland", "Emmen", "Delft", "Venlo",
-        "Alkmaar", "Deventer", "Midden-Groningen", "Helmond", "Ede",
-        "Leeuwarden", "Zwolle", "Sittard-Geleen", "Lelystad", "Roosendaal",
-        "Hengelo", "Oss", "Purmerend", "Gouda", "Almelo",
-        "Nieuwegein", "Bergen op Zoom", "Hardenberg", "Middelburg", "Schiedam",
-        "Spijkenisse", "Hoorn", "Vlaardingen", "Alphen aan den Rijn", "Zaandijk",
-    ],
-    "SA": [
-        "Riyadh", "Jeddah", "Mecca", "Medina", "Dammam",
-        "Khobar", "Tabuk", "Buraidah", "Khamis Mushait", "Abha",
-        "Hofuf", "Jubail", "Taif", "Yanbu", "Al Kharj",
-        "Hail", "Najran", "Dhahran", "Arar", "Sakaka",
-        "Jizan", "Qatif", "Al Bahah", "Bisha", "Ar Rass",
-        "Unayzah", "Rafha", "Turaif", "Al Ula", "Wadi ad-Dawasir",
-        "Al Qunfudhah", "Dawadmi", "Zulfi", "Al Majmaah", "Sharurah",
-        "Aflaj", "Muzahmiyya", "Al Khubar", "Muhayil", "Samtah",
-        "Farasan", "Al Lith", "Rabigh", "Badr", "Khulais",
-        "Turbah", "Al Wajh", "Duba", "Tayma", "Al Qurayat",
-    ],
-    "TR": [
-        "Istanbul", "Ankara", "Izmir", "Bursa", "Antalya",
-        "Adana", "Konya", "Gaziantep", "Şanlıurfa", "Kocaeli",
-        "Mersin", "Diyarbakır", "Hatay", "Manisa", "Kayseri",
-        "Samsun", "Balıkesir", "Tekirdağ", "Kahramanmaraş", "Van",
-        "Denizli", "Sakarya", "Aydın", "Muğla", "Eskişehir",
-        "Trabzon", "Mardin", "Erzurum", "Ordu", "Malatya",
-        "Rize", "Elazığ", "Sivas", "Batman", "Afyonkarahisar",
-        "Zonguldak", "Tokat", "Osmaniye", "Çorum", "Giresun",
-        "Şırnak", "Aksaray", "Kütahya", "Kastamonu", "Uşak",
-        "Bolu", "Burdur", "Isparta", "Nevşehir", "Niğde",
-    ],
-    "CH": [
-        "Zurich", "Geneva", "Basel", "Bern", "Lausanne",
-        "Winterthur", "Lucerne", "St. Gallen", "Lugano", "Biel/Bienne",
-        "Thun", "Bellinzona", "Köniz", "La Chaux-de-Fonds", "Schaffhausen",
-        "Fribourg", "Chur", "Vernier", "Neuchâtel", "Uster",
-        "Sion", "Emmen", "Lancy", "Kriens", "Burgdorf",
-        "Zug", "Riehen", "Aarau", "Dübendorf", "Davos",
-        "Frauenfeld", "Dietikon", "Wettingen", "Frenkendorf", "Kreuzlingen",
-        "Muttenz", "Rheinfelden", "Arlesheim", "Münsingen", "Bulle",
-        "Lyss", "Grenchen", "Olten", "Solothurn", "Arbon",
-        "Wil", "Rorschach", "Romanshorn", "Weinfelden", "Amriswil",
-    ],
-    "RS": [
-        "Belgrade", "Novi Sad", "Niš", "Kragujevac", "Subotica",
-        "Zrenjanin", "Pančevo", "Čačak", "Novi Pazar", "Kraljevo",
-        "Smederevo", "Leskovac", "Valjevo", "Užice", "Vranje",
-        "Šabac", "Zaječar", "Sombor", "Pirot", "Požarevac",
-        "Bor", "Prokuplje", "Jagodina", "Kruševac", "Kikinda",
-        "Ruma", "Sremska Mitrovica", "Vršac", "Loznica", "Aranđelovac",
-        "Sokobanja", "Bačka Palanka", "Inđija", "Stara Pazova", "Ćuprija",
-        "Paraćin", "Mladenovac", "Obrenovac", "Lazarevac", "Ivanjica",
-        "Priboj", "Prijepolje", "Trstenik", "Aleksandrovac", "Vrnjačka Banja",
-        "Knjaževac", "Negotin", "Majdanpek", "Kladovo", "Bela Palanka",
-    ],
+# Cities by region (automatski iz california_config)
+CITIES_BY_REGION: dict[str, list[str]] = {
+    region.value: data["cities"]
+    for region, data in REGION_DATA.items()
 }
 
 
 class LocationInfo(BaseModel):
-    country: Country
+    region: CaliforniaRegion
     city: str
 
     @model_validator(mode="after")
     def city_must_be_valid(self) -> "LocationInfo":
-        valid_cities = CITIES_BY_COUNTRY.get(self.country.value, [])
+        valid_cities = get_cities_for_region(self.region)
         if self.city not in valid_cities:
             raise ValueError(
-                f"'{self.city}' nije validan grad za {self.country.value}. "
-                f"Dostupni gradovi: {valid_cities}"
+                f"'{self.city}' is not a valid city for {self.region.value}. "
+                f"Available cities: {valid_cities}"
             )
         return self
 
 
 # ─────────────────────────────────────────
-# 💰 FINANCIAL
+# 💰 FINANCIAL (USD only)
 # ─────────────────────────────────────────
 
 class Currency(str, Enum):
-    EUR = "EUR"
-    USD = "USD"
+    USD = "USD"  # California-only system = USD only
 
 
 class FinancialInfo(BaseModel):
-    income:        int = Field(..., gt=0, description="Mesečni prihod")
-    expenses:      int = Field(..., ge=0, description="Mesečni troškovi")
-    monthly_debt:  int = Field(..., ge=0, description="Mesečna rata postojećeg duga")
-    savings:       int = Field(..., ge=0, description="Ukupna štednja")
-    currency:      Currency
+    income: int = Field(..., gt=0, description="Monthly income (USD)")
+    expenses: int = Field(..., ge=0, description="Monthly expenses (USD)")
+    monthly_debt: int = Field(..., ge=0, description="Monthly debt payment (USD)")
+    savings: int = Field(..., ge=0, description="Total savings (USD)")
+    currency: Currency = Field(default=Currency.USD)
 
     @model_validator(mode="after")
     def expenses_lt_income(self) -> "FinancialInfo":
         if self.expenses >= self.income:
-            raise ValueError("Troškovi ne mogu biti veći ili jednaki prihodima.")
+            raise ValueError("Expenses cannot exceed or equal income.")
         return self
 
+
 # ─────────────────────────────────────────
-# 💼 PROFESSIONAL
+# 💼 PROFESSIONAL — CALIFORNIA-SPECIFIC
 # ─────────────────────────────────────────
 
-from enum import Enum
+class CaliforniaSector(str, Enum):
+    # California-flagship industries
+    TECHNOLOGY = "Technology"
+    BIOTECHNOLOGY = "Biotechnology"
+    ENTERTAINMENT = "Entertainment & Media"
+    AGRICULTURE = "Agriculture"
+    TOURISM = "Tourism & Hospitality"
 
+    # Major California industries
+    AEROSPACE = "Aerospace & Defense"
+    FINANCE = "Finance & Banking"
+    HEALTHCARE = "Healthcare"
+    REAL_ESTATE = "Real Estate"
+    GOVERNMENT = "Government & Public Sector"
+    EDUCATION = "Education"
 
-class Sector(str, Enum):
-    TECHNOLOGY            = "Technology"
-    FINANCE               = "Finance"
-    HEALTHCARE            = "Healthcare"
-    EDUCATION             = "Education"
-    LAW_ADMIN             = "Law & Administration"
+    # Standard sectors (preserved from original)
+    LAW_ADMIN = "Law & Administration"
     CONSTRUCTION_INDUSTRY = "Construction & Industry"
-    TRADE_SERVICES        = "Trade & Services"
-    ARTS_ENTERTAINMENT    = "Arts & Entertainment"
-    AGRICULTURE           = "Agriculture"
-    TRANSPORTATION        = "Transportation"
-    ENERGY                = "Energy"
-    REAL_ESTATE           = "Real Estate"
-    MEDIA_COMMUNICATIONS  = "Media & Communications"
-    SCIENCE_RESEARCH      = "Science & Research"
-    OTHER                 = "Other"
+    TRADE_SERVICES = "Trade & Services"
+    ARTS = "Arts & Crafts"
+    TRANSPORTATION = "Transportation"
+    ENERGY = "Energy"
+    MEDIA_COMMUNICATIONS = "Media & Communications"
+    SCIENCE_RESEARCH = "Science & Research"
+
+    # Niche California
+    WINE_INDUSTRY = "Wine & Spirits"
+    CANNABIS = "Cannabis Industry"
+    VENTURE_CAPITAL = "Venture Capital"
+
+    OTHER = "Other"
 
 
+# Keep existing Profession enum (150+ professions - too valuable to lose)
 class Profession(str, Enum):
     # TECHNOLOGY
     SOFTWARE_ENGINEER = "Software Engineer"
@@ -420,7 +177,7 @@ class Profession(str, Enum):
     PRODUCT_MANAGER = "Product Manager"
     ACCOUNT_MANAGER = "Account Manager"
 
-    # ARTS & ENTERTAINMENT
+    # ARTS & ENTERTAINMENT (heavy in California!)
     GRAPHIC_DESIGNER = "Graphic Designer"
     UX_UI_DESIGNER = "UX/UI Designer"
     PHOTOGRAPHER = "Photographer"
@@ -429,13 +186,18 @@ class Profession(str, Enum):
     MUSICIAN = "Musician"
     ACTOR = "Actor"
     FILM_DIRECTOR = "Film Director"
+    SCREENWRITER = "Screenwriter"  # ⭐ ADDED for LA
+    PRODUCER = "Producer"  # ⭐ ADDED for LA
+    EDITOR = "Editor"  # ⭐ ADDED for LA
 
-    # AGRICULTURE
+    # AGRICULTURE (Central Valley!)
     FARMER = "Farmer"
     AGRONOMIST = "Agronomist"
     VETERINARIAN = "Veterinarian"
     AGRICULTURAL_TECHNICIAN = "Agricultural Technician"
     GREENHOUSE_WORKER = "Greenhouse Worker"
+    WINEMAKER = "Winemaker"  # ⭐ ADDED for Central Coast
+    VINEYARD_MANAGER = "Vineyard Manager"  # ⭐ ADDED
 
     # TRANSPORTATION
     TRUCK_DRIVER = "Truck Driver"
@@ -466,12 +228,14 @@ class Profession(str, Enum):
     COPYWRITER = "Copywriter"
     SOCIAL_MEDIA_MANAGER = "Social Media Manager"
 
-    # SCIENCE
+    # SCIENCE (biotech in San Diego!)
     RESEARCH_SCIENTIST = "Research Scientist"
     BIOLOGIST = "Biologist"
     CHEMIST = "Chemist"
     PHYSICIST = "Physicist"
     DATA_ANALYST = "Data Analyst"
+    BIOTECH_RESEARCHER = "Biotech Researcher"  # ⭐ ADDED for San Diego
+    CLINICAL_RESEARCHER = "Clinical Researcher"  # ⭐ ADDED
 
     # OTHER
     ELECTRICIAN = "Electrician"
@@ -480,7 +244,7 @@ class Profession(str, Enum):
     FITNESS_TRAINER = "Fitness Trainer"
     HAIRDRESSER = "Hairdresser"
 
-    # EXTRA (do 150)
+    # EXTRA
     SCRUM_MASTER = "Scrum Master"
     BLOCKCHAIN_DEVELOPER = "Blockchain Developer"
     ETHICAL_HACKER = "Ethical Hacker"
@@ -521,30 +285,84 @@ class Profession(str, Enum):
     TOUR_GUIDE = "Tour Guide"
     BARTENDER = "Bartender"
 
+    # ⭐ NEW California-specific
+    STARTUP_FOUNDER = "Startup Founder"
+    VC_ANALYST = "Venture Capital Analyst"
+    BUDTENDER = "Budtender (Cannabis)"
+
 
 class EmploymentStatus(str, Enum):
-    FULL_TIME     = "full-time"
-    PART_TIME     = "part-time"
-    FREELANCER    = "freelancer"
+    FULL_TIME = "full-time"
+    PART_TIME = "part-time"
+    FREELANCER = "freelancer"
     SELF_EMPLOYED = "self-employed"
-    UNEMPLOYED    = "unemployed"
-    STUDENT       = "student"
-    RETIRED       = "retired"
+    UNEMPLOYED = "unemployed"
+    STUDENT = "student"
+    RETIRED = "retired"
 
 
 class RiskProfile(str, Enum):
-    LOW    = "low"     # → safety
-    MEDIUM = "medium"  # → growth
-    HIGH   = "high"    # → profit
+    LOW = "low"
+    MEDIUM = "medium"
+    HIGH = "high"
 
     @property
     def goal(self) -> str:
         return {
-            RiskProfile.LOW:    "safety",
+            RiskProfile.LOW: "safety",
             RiskProfile.MEDIUM: "growth",
-            RiskProfile.HIGH:   "profit",
+            RiskProfile.HIGH: "profit",
         }[self]
 
+
+# ⭐ NEW: California-specific professional fields (all optional)
+
+class TechRole(str, Enum):
+    SOFTWARE_ENGINEER = "Software Engineer"
+    PRODUCT_MANAGER = "Product Manager"
+    DESIGNER = "Designer (UX/UI)"
+    DATA_SCIENTIST = "Data Scientist"
+    DEVOPS_SRE = "DevOps / SRE"
+    SECURITY = "Security Engineer"
+    HARDWARE = "Hardware Engineer"
+    QA = "QA / Test Engineer"
+    ENGINEERING_MANAGER = "Engineering Manager"
+    EXECUTIVE = "Tech Executive (VP/CTO/CEO)"
+    OTHER_TECH = "Other Tech Role"
+
+
+class EquityCompensation(str, Enum):
+    NONE = "None"
+    ISO = "ISO (Incentive Stock Options)"
+    NSO = "NSO (Non-qualified Stock Options)"
+    RSU = "RSU (Restricted Stock Units)"
+    ESPP = "ESPP (Employee Stock Purchase)"
+    FOUNDER_STOCK = "Founder Stock"
+    MIXED = "Mixed (RSUs + Options)"
+
+
+class CompanyStage(str, Enum):
+    PRE_SEED = "Pre-seed Startup"
+    SEED = "Seed Stage Startup"
+    SERIES_A_B = "Series A-B"
+    SERIES_C_PLUS = "Series C+"
+    PRE_IPO = "Pre-IPO / Late Stage"
+    PUBLIC = "Public Company"
+    FAANG = "Big Tech / FAANG"
+    GOVERNMENT = "Government"
+    NONPROFIT = "Nonprofit"
+    SMALL_BUSINESS = "Small Business"
+    NA = "Not Applicable"
+
+
+class EntertainmentRole(str, Enum):
+    ABOVE_LINE = "Above-the-line (Writer/Director/Producer)"
+    BELOW_LINE = "Below-the-line (Crew)"
+    PERFORMER = "Performer (Actor/Musician)"
+    EXECUTIVE = "Studio Executive"
+    INDEPENDENT_CONTRACTOR = "Independent Contractor"
+    AGENT_MANAGER = "Agent / Manager"
+    NA = "Not Applicable"
 
 
 # ─────────────────────────────────────────
@@ -552,30 +370,29 @@ class RiskProfile(str, Enum):
 # ─────────────────────────────────────────
 
 class HorizonGroup(str, Enum):
-    SHORT     = "1-3"
-    MEDIUM    = "3-5"
-    LONG      = "5-8"
+    SHORT = "1-3"
+    MEDIUM = "3-5"
+    LONG = "5-8"
     VERY_LONG = "8+"
-
 
 
 class Preferences(BaseModel):
     risk_profile: RiskProfile
-    horizon:      HorizonGroup
+    horizon: HorizonGroup
+
 
 # ─────────────────────────
 # ⏰ WEEKLY HOURS AVAILABLE
 # ─────────────────────────
 
 class WeeklyHours(str, Enum):
-    MINIMAL = "0-5"      # passive (< 1h dnevno)
-    LIGHT = "5-15"       # weekend hobi
-    MODERATE = "15-30"   # ozbiljan side biznis
-    HEAVY = "30+"        # full-time biznis
+    MINIMAL = "0-5"
+    LIGHT = "5-15"
+    MODERATE = "15-30"
+    HEAVY = "30+"
+
 
 # 🎯 PREDEFINED INTERESTS (50)
-# ─────────────────────────
-# ─────────────────────────
 PREDEFINED_INTERESTS = [
     # Sport & fitness
     "fitness", "yoga", "running", "cycling", "swimming",
@@ -606,28 +423,48 @@ PREDEFINED_INTERESTS = [
 ]
 
 
-
-
 class ProfessionalInfo(BaseModel):
-    sector: Sector
+    sector: CaliforniaSector
     profession: Profession
     employment_status: EmploymentStatus
 
-    # ⭐ NOVA POLJA
     interests: List[str] = Field(
         default_factory=list,
-        description=f"List of interests. Predefined: {len(PREDEFINED_INTERESTS)}, but you can also add custom.",
+        description=f"List of interests. Predefined: {len(PREDEFINED_INTERESTS)}, custom allowed.",
         max_length=4
     )
     prior_experience: str = Field(
         default="",
-        description="Brief description of previous businesses/projects (free text)",
+        description="Brief description of previous businesses/projects",
         max_length=500
     )
     weekly_hours: WeeklyHours = Field(
         default=WeeklyHours.LIGHT,
-        description="How many hours a week the user can invest in the business"
+        description="Hours per week available for business"
     )
+
+    # ⭐ NEW: California-specific optional fields
+    tech_role: Optional[TechRole] = Field(
+        default=None,
+        description="Specific tech role (if applicable, Bay Area focus)"
+    )
+    equity_compensation: Optional[EquityCompensation] = Field(
+        default=None,
+        description="Type of equity compensation received"
+    )
+    company_stage: Optional[CompanyStage] = Field(
+        default=None,
+        description="Stage of current employer (especially for tech/biotech)"
+    )
+    qsbs_eligible: Optional[bool] = Field(
+        default=None,
+        description="Does your stock qualify for QSBS exclusion? (Section 1202)"
+    )
+    entertainment_role: Optional[EntertainmentRole] = Field(
+        default=None,
+        description="Entertainment industry role (LA-specific)"
+    )
+
 
 # ─────────────────────────────────────────
 # 👤 PERSONAL
@@ -642,10 +479,8 @@ class PersonalInfo(BaseModel):
 # ─────────────────────────────────────────
 
 class UserInput(BaseModel):
-    personal:     PersonalInfo
-    location:     LocationInfo
-    financial:    FinancialInfo
+    personal: PersonalInfo
+    location: LocationInfo
+    financial: FinancialInfo
     professional: ProfessionalInfo
-    preferences:  Preferences
-
-
+    preferences: Preferences
