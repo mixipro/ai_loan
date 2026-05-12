@@ -3,29 +3,15 @@
 import logging
 from app.services.llm_service import call_llm_text as call_llm
 from app.agents._common import parse_llm_json, safe_str, call_llm_with_retry
+from app.core.california_config import REGION_DATA
 
 logger = logging.getLogger(__name__)
 
 
-# ─────────────────────────
-# 🎯 PROFILE WEIGHTS
-# ─────────────────────────
 PROFILE_WEIGHTS = {
-    "low": {
-        "roi": 0.2,
-        "stability": 0.6,
-        "risk_penalty": 0.2
-    },
-    "medium": {
-        "roi": 0.5,
-        "stability": 0.3,
-        "risk_penalty": 0.2
-    },
-    "high": {
-        "roi": 0.7,
-        "stability": 0.1,
-        "risk_penalty": 0.2
-    }
+    "low": {"roi": 0.2, "stability": 0.6, "risk_penalty": 0.2},
+    "medium": {"roi": 0.5, "stability": 0.3, "risk_penalty": 0.2},
+    "high": {"roi": 0.7, "stability": 0.1, "risk_penalty": 0.2},
 }
 
 
@@ -52,7 +38,6 @@ def select_best_strategy(strategies, profile):
     profitable = [s for s in strategies if s.get("status") == "profitable"]
 
     if not profitable:
-        # ⚠️ NIJEDNA NIJE PROFITABILNA SA KREDITOM
         all_with_score = strategies.copy()
         for s in all_with_score:
             s["personalized_score"] = personalized_score(s, profile)
@@ -65,7 +50,6 @@ def select_best_strategy(strategies, profile):
         )
         return chosen
 
-    # ✅ NORMALAN SLUČAJ — ima profitabilnih strategija
     for s in profitable:
         s["personalized_score"] = personalized_score(s, profile)
 
@@ -74,10 +58,7 @@ def select_best_strategy(strategies, profile):
 
 
 def build_explanation_prompt(user, loan: dict, all_strategies: list, chosen: dict) -> str:
-    """
-    Bogatiji prompt — koristi nova polja iz agenata + nove user kontekste.
-    Naglašava razdvajanje 'investment risk' od 'creditworthiness'.
-    """
+    """California-aware explanation prompt."""
     strategies_text = ""
     for s in all_strategies:
         strategies_text += f"""
@@ -98,19 +79,26 @@ def build_explanation_prompt(user, loan: dict, all_strategies: list, chosen: dic
         else "Not specified"
     )
 
+    # ⭐ California context
+    region = user.location.region
+    region_data = REGION_DATA[region]
+
     return f"""
-You are a senior financial advisor. Explain to the user WHY this specific strategy 
-is the best fit for their profile, using natural and persuasive language.
+You are a senior California financial advisor. Explain why this specific strategy 
+fits the user's California profile, using natural and persuasive language.
 
 USER PROFILE:
 - Age: {user.personal.age}
-- Country: {user.location.country.value}
+- Region: {region_data['display_name']} (California, USA)
+- City: {user.location.city}
 - Profession: {user.professional.profession.value}
+- Sector: {user.professional.sector.value}
 - Interests: {interests_text}
 - Weekly hours available: {user.professional.weekly_hours.value}
-- Monthly income: {user.financial.income} {user.financial.currency.value}
-- Savings: {user.financial.savings}
-- Investment risk tolerance: {user.preferences.risk_profile.value} (user's PREFERENCE for portfolio risk)
+- Monthly income: ${user.financial.income} USD
+- Savings: ${user.financial.savings}
+- Cost of living: {region_data['cost_of_living_index']}x national avg
+- Investment risk tolerance: {user.preferences.risk_profile.value}
 - Investment horizon: {user.preferences.horizon.value} years
 
 ⚠️ IMPORTANT CONCEPT:
@@ -118,11 +106,17 @@ USER PROFILE:
 "creditworthiness" (bank-side rating affecting loan terms) are EVALUATED INDEPENDENTLY.
 A user can be highly creditworthy (good loan terms) while preferring conservative investments.
 Always honor the user's stated risk tolerance for investment selection.
-DO NOT confuse these two dimensions in your reasoning.
+
+🌴 CALIFORNIA CONTEXT TO LEVERAGE:
+- California state tax: progressive up to 13.3% (capital gains taxed as ordinary income)
+- Prop 13 benefit for real estate buyers (locked-in property tax)
+- QSBS exclusion potential for tech equity holders (up to $10M tax-free)
+- California muni bonds: DOUBLE tax-free (federal + state)
+- Region: {region_data['display_name']} — strong industries: {', '.join(region_data['primary_industries'])}
 
 LOAN CONDITIONS:
 - Approved: {loan.get("approved")}
-- Max loan: {loan.get("max_loan_amount")}
+- Max loan: ${loan.get("max_loan_amount", 0)}
 - Interest rate: {loan.get("interest_rate")}
 
 ALL STRATEGIES EVALUATED:
@@ -134,21 +128,20 @@ CHOSEN STRATEGY: {chosen['agent']}
 
 YOUR TASK:
 Write a personalized recommendation in 5-7 sentences explaining:
-1. Why "{chosen.get('title')}" matches user's INVESTMENT risk tolerance ({user.preferences.risk_profile.value})
+1. Why "{chosen.get('title')}" matches user's investment risk tolerance ({user.preferences.risk_profile.value})
 2. Why it suits investment horizon ({user.preferences.horizon.value} years)
-3. How it fits weekly hours availability ({user.professional.weekly_hours.value}) and interests ({interests_text})
-4. Specifically why it was preferred over the other 2 strategies (compare directly using net_return)
-5. What the user should expect financially in concrete numbers (use NET return after loan interest)
-6. The first concrete step they should take this week
+3. How it fits {region_data['display_name']} dynamics + interests ({interests_text})
+4. Why preferred over alternatives (compare directly using net_return)
+5. California-specific advantage (Prop 13 / QSBS / muni bonds — whichever relevant)
+6. First concrete step this week
 
-Write in second person ("you should...", "your profile..."). Be specific, not generic.
+Write in second person ("you should..."). Be specific, not generic.
 
 STRICT RULES:
 - Return ONLY valid JSON, no markdown fences
-- reasoning: 5-7 sentences, persuasive and specific
-- next_step: ONE concrete action (not a list)
-- comparison: short comparison summary (1-2 sentences explaining trade-offs)
-- Use NET return (after loan interest) when discussing real profitability
+- reasoning: 5-7 sentences, persuasive and California-aware
+- next_step: ONE concrete action
+- comparison: short comparison summary
 
 FORMAT:
 {{
@@ -160,10 +153,6 @@ FORMAT:
 
 
 async def generate_explanation(user, loan: dict, all_strategies: list, chosen: dict) -> dict:
-    """
-    Generiše LLM eksplanaciju sa retry-jem.
-    Ako svi pokušaji propadnu → vraća fallback eksplanaciju.
-    """
     prompt = build_explanation_prompt(user, loan, all_strategies, chosen)
 
     try:
@@ -181,21 +170,24 @@ async def generate_explanation(user, loan: dict, all_strategies: list, chosen: d
     except Exception as e:
         logger.error(f"Judge LLM failed after retries, using fallback: {e}")
 
+        from app.core.california_config import REGION_DATA
+        region = user.location.region
+        region_name = REGION_DATA[region]["display_name"]
+
         return {
             "reasoning": (
                 f"Based on your {user.preferences.risk_profile.value} investment risk tolerance "
-                f"and {user.preferences.horizon.value} year horizon, "
+                f"and {user.preferences.horizon.value} year horizon in {region_name}, "
                 f"the {chosen['agent']} strategy ('{chosen.get('title', 'N/A')}') "
                 f"offers the best balance of return ({chosen['real_return'] * 100:.1f}%) "
-                f"and stability ({chosen['stability'] * 100:.0f}%). "
-                f"This was preferred over alternatives because of your profile weighting."
+                f"and stability ({chosen['stability'] * 100:.0f}%) for your California profile."
             ),
             "next_step": (
                 chosen.get('next_steps', ['Research this strategy further.'])[0]
                 if chosen.get('next_steps') else
                 f"Consider allocating capital to the {chosen['agent']} strategy."
             ),
-            "comparison": "Other strategies were viable but ranked lower for your profile.",
+            "comparison": "Other strategies were viable but ranked lower for your California profile.",
             "llm_error": str(e)
         }
 

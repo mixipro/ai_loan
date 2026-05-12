@@ -22,12 +22,16 @@ logging.basicConfig(
 # 🚀 APP
 # ─────────────────────────
 app = FastAPI(
-    title="AI Investment & Loan Advisor",
-    description="Multi-agent financial decision system",
-    version="2.0.0"
+    title="CaliforniaCFO — AI Financial Advisor",
+    description=(
+        "Multi-agent financial decision system specialized for California. "
+        "Combines deterministic engines, live market data (Phase 2), "
+        "and RAG-based California expert knowledge (Phase 3)."
+    ),
+    version="3.0.0"
 )
 
-# CORS (još uvek korisno za development)
+# CORS (development)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -36,22 +40,20 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Register API routes (POSLE setup-a)
+# Register API routes
 app.include_router(router)
 
 # ─────────────────────────
 # 🌐 FRONTEND
 # ─────────────────────────
-# Putanja do frontend foldera (relativna od ovog fajla)
 FRONTEND_DIR = Path(__file__).parent.parent / "frontend"
 
-# ⭐ Root endpoint vraća index.html
+
 @app.get("/")
 async def serve_frontend():
     return FileResponse(FRONTEND_DIR / "index.html")
 
-# ⭐ Mount-uje sve ostale fajlove iz frontend foldera
-# (CSS, JS, slike — ako kasnije budeš dodavao)
+
 app.mount("/static", StaticFiles(directory=FRONTEND_DIR), name="static")
 
 
@@ -60,7 +62,11 @@ app.mount("/static", StaticFiles(directory=FRONTEND_DIR), name="static")
 # ─────────────────────────
 @app.get("/health")
 def health():
-    return {"status": "running"}
+    return {
+        "status": "running",
+        "system": "CaliforniaCFO",
+        "version": "3.0.0",
+    }
 
 
 if __name__ == "__main__":
