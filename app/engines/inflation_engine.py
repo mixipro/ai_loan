@@ -1,41 +1,22 @@
 # app/engines/inflation_engine.py
 
+"""
+California / US inflation engine.
+USD-only, US CPI based.
+Live web search will update these rates in Phase 2.
+"""
+
 from enum import Enum
 
+# ─────────────────────────
+# 🇺🇸 US INFLATION (baseline)
+# Will be live-updated via Brave Search in Phase 2
+# ─────────────────────────
+US_INFLATION_BASELINE = 0.031  # 3.1% — US CPI April 2026 estimate
 
-# ─────────────────────────
-# 🌍 COUNTRY INFLATION (PRIMARY)
-# ─────────────────────────
-COUNTRY_INFLATION = {
-    "US": 0.03,
-    "DE": 0.025,
-    "JP": 0.01,
-    "IN": 0.06,
-    "GB": 0.03,
-    "FR": 0.025,
-    "IT": 0.03,
-    "BR": 0.05,
-    "CA": 0.03,
-    "RU": 0.07,
-    "KR": 0.025,
-    "AU": 0.03,
-    "ES": 0.03,
-    "MX": 0.05,
-    "ID": 0.04,
-    "NL": 0.025,
-    "SA": 0.03,
-    "TR": 0.08,
-    "CH": 0.02,
-    "RS": 0.06
-}
-
-
-# ─────────────────────────
-# 💱 CURRENCY INFLATION (GLOBAL)
-# ─────────────────────────
+# Currency inflation (USD only for California-only system)
 CURRENCY_INFLATION = {
-    "USD": 0.03,
-    "EUR": 0.025
+    "USD": US_INFLATION_BASELINE,
 }
 
 
@@ -52,45 +33,44 @@ class AgentType(str, Enum):
 # 🔥 AGENT → INFLATION TYPE
 # ─────────────────────────
 AGENT_INFLATION_TYPE = {
-    AgentType.STOCK: "currency",
-    AgentType.REAL_ESTATE: "country",
-    AgentType.BUSINESS: "country",
+    AgentType.STOCK: "currency",  # Global ETFs
+    AgentType.REAL_ESTATE: "local",  # California-specific
+    AgentType.BUSINESS: "local",  # California-specific
 }
 
 
 # ─────────────────────────
 # 🔍 CORE FUNCTION
 # ─────────────────────────
-def get_inflation_rate(agent: AgentType, country: str, currency: str) -> float:
+def get_inflation_rate(agent: AgentType, currency: str = "USD") -> float:
     """
-    Inflacija zavisi od tipa investicije (agenta)
+    Returns inflation rate based on agent type.
+    California-only system → US inflation for everything.
+
+    Note: 'country' param removed since system is California-only.
     """
+    inflation_type = AGENT_INFLATION_TYPE.get(agent, "local")
 
-    inflation_type = AGENT_INFLATION_TYPE.get(agent, "country")
-
-    # 📈 GLOBAL (ETF, stock)
+    # 📈 GLOBAL (ETF, stock) — currency-based
     if inflation_type == "currency":
-        return CURRENCY_INFLATION.get(currency, 0.03)
+        return CURRENCY_INFLATION.get(currency, US_INFLATION_BASELINE)
 
-    # 🏠 / 💼 LOCAL (real estate, business)
-    return COUNTRY_INFLATION.get(country, 0.03)
+    # 🏠 / 💼 LOCAL (California real estate, business) — US CPI
+    return US_INFLATION_BASELINE
 
 
 # ─────────────────────────
 # 📉 REAL VALUE
 # ─────────────────────────
 def adjust_for_inflation(
-    amount: float,
-    years: int,
-    agent: AgentType,
-    country: str,
-    currency: str
+        amount: float,
+        years: int,
+        agent: AgentType,
+        currency: str = "USD"
 ) -> float:
-
-    rate = get_inflation_rate(agent, country, currency)
-
+    """Adjusts amount for inflation (purchasing power)."""
+    rate = get_inflation_rate(agent, currency)
     adjusted = amount / ((1 + rate) ** years)
-
     return round(adjusted, 2)
 
 
@@ -98,30 +78,34 @@ def adjust_for_inflation(
 # 📈 FUTURE VALUE
 # ─────────────────────────
 def future_value(
-    amount: float,
-    years: int,
-    agent: AgentType,
-    country: str,
-    currency: str
+        amount: float,
+        years: int,
+        agent: AgentType,
+        currency: str = "USD"
 ) -> float:
-
-    rate = get_inflation_rate(agent, country, currency)
-
+    """Computes future value adjusted for inflation."""
+    rate = get_inflation_rate(agent, currency)
     future = amount * ((1 + rate) ** years)
-
     return round(future, 2)
 
 
 # ─────────────────────────
-# 💰 REAL RETURN (NAJBITNIJE)
+# 💰 REAL RETURN
 # ─────────────────────────
 def real_return(
-    nominal_return: float,
-    agent: AgentType,
-    country: str,
-    currency: str
+        nominal_return: float,
+        agent: AgentType,
+        currency: str = "USD"
 ) -> float:
-
-    inflation = get_inflation_rate(agent, country, currency)
-
+    """Computes real return after inflation (Fisher equation)."""
+    inflation = get_inflation_rate(agent, currency)
     return round((1 + nominal_return) / (1 + inflation) - 1, 4)
+
+
+# ─────────────────────────
+# 🔄 BACKWARD COMPAT WRAPPER
+# (za stare calls iz orchestrator-a koji prosleđuju country)
+# ─────────────────────────
+def get_inflation_rate_legacy(agent: AgentType, country: str, currency: str) -> float:
+    """Legacy wrapper — ignores country, uses US baseline."""
+    return get_inflation_rate(agent, currency)

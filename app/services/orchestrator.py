@@ -5,14 +5,13 @@ import logging
 
 from app.engines.risk_engine import calculate_risk_score
 from app.engines.interest_engine import calculate_interest_rate
-from app.engines.loan_engine import calculate_loan_offer
+from app.engines.loan_engine import calculate_loan_offer, calculate_custom_loan
 from app.engines.investment_engine import get_best_investments
 
 from app.agents.stock_agent import run_stock_agent
 from app.agents.business_agent import run_business_agent
 from app.agents.real_estate_agent import run_real_estate_agent
 from app.agents.judge_agent import run_judge_agent
-from app.engines.loan_engine import calculate_custom_loan
 
 logger = logging.getLogger(__name__)
 
@@ -21,10 +20,7 @@ logger = logging.getLogger(__name__)
 # 🚀 RUN ALL AGENTS — PARALLEL
 # ─────────────────────────
 async def run_all_agents(user, loan: dict) -> list:
-    """
-    Pokreće sva tri agenta PARALELNO preko asyncio.gather.
-    return_exceptions=True znači da exception JEDNOG agenta ne ruši ostale.
-    """
+    """Runs 3 agents in parallel via asyncio.gather."""
     agent_definitions = [
         ("stock", run_stock_agent),
         ("business", run_business_agent),
@@ -33,11 +29,9 @@ async def run_all_agents(user, loan: dict) -> list:
 
     logger.info("Launching agents in parallel...")
 
-    # 🚀 Paralelno pokretanje
     tasks = [agent_fn(user, loan) for _, agent_fn in agent_definitions]
     raw_results = await asyncio.gather(*tasks, return_exceptions=True)
 
-    # 🛡️ Mapiranje rezultata + fallback za exception-e
     results = []
     for (name, _), result in zip(agent_definitions, raw_results):
         if isinstance(result, Exception):
@@ -61,10 +55,7 @@ async def run_all_agents(user, loan: dict) -> list:
 # 📝 BUILD RISK EXPLANATION
 # ─────────────────────────
 def build_risk_explanation(user_risk_pref: str, creditworthiness: str) -> str:
-    """
-    Generiše tekstualno objašnjenje razlike između investment risk tolerance
-    i creditworthiness za korisnika.
-    """
+    """Generates explanation for risk tolerance vs creditworthiness."""
     base = (
         f"You selected '{user_risk_pref.upper()}' risk tolerance for INVESTMENTS. "
         f"Your financial profile rates as '{creditworthiness.upper()}' CREDITWORTHINESS "
@@ -72,7 +63,6 @@ def build_risk_explanation(user_risk_pref: str, creditworthiness: str) -> str:
         f"These two dimensions are evaluated independently."
     )
 
-    # Soft note kada se drastično razlikuju
     if user_risk_pref == "low" and creditworthiness == "high":
         base += (
             " 📊 Note: Your strong financial profile would qualify you for aggressive "
@@ -92,58 +82,58 @@ def build_risk_explanation(user_risk_pref: str, creditworthiness: str) -> str:
 # ─────────────────────────
 async def run_pipeline(user) -> dict:
     """
-    Glavni tok sistema (async):
+    Main system flow (async):
     user → risk → interest → loan → [agents PARALLEL] → investment eval → judge → result
     """
     logger.info("=" * 50)
-    logger.info("Pipeline started")
+    logger.info("Pipeline started (California system)")
     logger.info("=" * 50)
 
     # ─────────────────────────
-    # 1️⃣ RISK (sync — matematika)
+    # 1️⃣ RISK
     # ─────────────────────────
     logger.info("Step 1: calculating risk score")
     risk = calculate_risk_score(user)
     logger.info(
+        f"Region: {risk['region_display_name']} | "
         f"Risk level: {risk['level']} | "
         f"Creditworthiness: {risk['creditworthiness']} | "
         f"Score: {risk['adjusted_score']}"
     )
 
     # ─────────────────────────
-    # 2️⃣ INTEREST (sync — matematika)
+    # 2️⃣ INTEREST (California-aware, USD)
     # ─────────────────────────
     logger.info("Step 2: calculating interest rate")
-    country = user.location.country.value
-    interest = calculate_interest_rate(risk, country)
+    interest = calculate_interest_rate(risk, loan_type="personal")
     logger.info(f"Interest rate: {interest['interest_rate']}")
 
     # ─────────────────────────
-    # 3️⃣ LOAN (sync — matematika)
+    # 3️⃣ LOAN
     # ─────────────────────────
     logger.info("Step 3: calculating loan offer")
     loan = calculate_loan_offer(user, risk, interest)
 
     if loan["approved"]:
-        logger.info(f"Loan approved: {loan['max_loan_amount']} ({loan['loan_years']}y)")
+        logger.info(f"Loan approved: ${loan['max_loan_amount']} ({loan['loan_years']}y)")
     else:
         logger.warning(f"Loan rejected: {loan.get('reason')}")
 
     # ─────────────────────────
-    # 4️⃣ AGENTS — ASYNC PARALLEL ⭐
+    # 4️⃣ AGENTS — ASYNC PARALLEL
     # ─────────────────────────
     logger.info("Step 4: running investment agents in parallel")
     agents_results = await run_all_agents(user, loan)
     logger.info(f"Agents returned {len(agents_results)} strategies")
 
     # ─────────────────────────
-    # 5️⃣ INVESTMENT EVALUATION (sync — matematika)
+    # 5️⃣ INVESTMENT EVALUATION
     # ─────────────────────────
     logger.info("Step 5: evaluating + ranking strategies")
     ranked = get_best_investments(user, agents_results, loan)
 
     # ─────────────────────────
-    # 6️⃣ JUDGE — ASYNC ⭐
+    # 6️⃣ JUDGE — ASYNC
     # ─────────────────────────
     logger.info("Step 6: judge agent — selecting best strategy")
     judgment = await run_judge_agent(user, loan, ranked)
@@ -155,7 +145,7 @@ async def run_pipeline(user) -> dict:
         )
 
     # ─────────────────────────
-    # 📝 BUILD RISK EXPLANATION ⭐ NOVO
+    # 📝 BUILD RISK EXPLANATION
     # ─────────────────────────
     user_risk_pref = user.preferences.risk_profile.value
     creditworthiness = risk.get("creditworthiness", "medium")
@@ -167,29 +157,8 @@ async def run_pipeline(user) -> dict:
     logger.info("Pipeline finished")
 
     return {
-        "user_summary": {
-            "country": country,
-            "city": user.location.city,
-            "age": user.personal.age,
-            "income": user.financial.income,
-            "expenses": user.financial.expenses,
-            "monthly_debt": user.financial.monthly_debt,
-            "savings": user.financial.savings,
-            "currency": user.financial.currency.value,
-            "risk_profile": user_risk_pref,  # user-ova preferencija
-            "horizon": user.preferences.horizon.value,
-        },
-        "risk": {
-            "creditworthiness": creditworthiness,  # ⭐ NOVO — bank-side rating
-            "explanation": risk_explanation,  # ⭐ NOVO — objašnjenje razlike
-            "score": risk["adjusted_score"],
-            "level": risk["level"],  # backward compat
-            "country": risk["country"],
-            "country_factor": risk["country_factor"],
-            "disposable_income": risk["disposable_income"],
-            "debt_ratio": risk["debt_ratio"],
-            "base_score": risk["base_score"],
-        },
+        "user_summary": _build_user_summary(user),
+        "risk": _build_risk_section(user, risk),
         "interest": interest,
         "loan": loan,
         "strategies": ranked,
@@ -204,30 +173,19 @@ async def run_pipeline(user) -> dict:
 # 🚀 SIMULATION PIPELINE
 # ─────────────────────────
 async def run_simulation_pipeline(user, simulation_choice) -> dict:
-    """
-    Custom kalkulator: korisnik bira parametre kredita i savings allokaciju.
-
-    Tok:
-    1. Risk + interest (kao i u /analyze — ne menja se po izboru)
-    2. Custom loan calculation (sa korisnikovim izborima)
-    3. Adapt user.savings na savings_to_invest
-    4. Pokreni agente sa novim parametrima
-    5. Investment evaluation
-    6. Judge
-    """
+    """Custom calculator: user chooses loan params and savings allocation."""
     logger.info("=" * 50)
-    logger.info("Simulation pipeline started")
+    logger.info("Simulation pipeline started (California system)")
     logger.info(f"User chose: loan={simulation_choice.loan_amount}, "
                 f"years={simulation_choice.loan_years}, "
                 f"savings_to_invest={simulation_choice.savings_to_invest}")
     logger.info("=" * 50)
 
     # ─────────────────────────
-    # 1️⃣ RISK + INTEREST (isti kao u /analyze)
+    # 1️⃣ RISK + INTEREST
     # ─────────────────────────
     risk = calculate_risk_score(user)
-    country = user.location.country.value
-    interest = calculate_interest_rate(risk, country)
+    interest = calculate_interest_rate(risk, loan_type="personal")
     annual_rate = interest["interest_rate"]
 
     # ─────────────────────────
@@ -243,12 +201,11 @@ async def run_simulation_pipeline(user, simulation_choice) -> dict:
     )
 
     if not loan["approved"]:
-        # 🚫 Custom loan ne prolazi validaciju
         return {
-            "user_summary": _build_user_summary(user, country),
+            "user_summary": _build_user_summary(user),
             "risk": _build_risk_section(user, risk),
             "interest": interest,
-            "loan": loan,  # sadrži "reason"
+            "loan": loan,
             "simulation_request": simulation_choice.model_dump(),
             "error": "Simulation parameters invalid",
             "strategies": [],
@@ -256,19 +213,16 @@ async def run_simulation_pipeline(user, simulation_choice) -> dict:
         }
 
     # ─────────────────────────
-    # 3️⃣ ADAPTIRAJ USER ZA SIMULACIJU
+    # 3️⃣ ADAPT USER
     # ─────────────────────────
-    # Kreiraj kopiju user-a sa modifikovanim savings-om
-    # (savings_to_invest = koliko zapravo ulaže, ostalo je rezerva)
     adapted_user = user.model_copy(deep=True)
     adapted_user.financial.savings = int(simulation_choice.savings_to_invest)
 
     logger.info(f"Adapted user: savings_to_invest={adapted_user.financial.savings}")
 
     # ─────────────────────────
-    # 4️⃣ AGENTS — sa custom loan + adapted savings
+    # 4️⃣ AGENTS
     # ─────────────────────────
-    # Konvertuj custom loan u format koji agenti očekuju
     agent_loan = {
         "approved": loan["loan_amount"] > 0,
         "max_loan_amount": loan["loan_amount"],
@@ -295,14 +249,12 @@ async def run_simulation_pipeline(user, simulation_choice) -> dict:
     # 📊 OUTPUT
     # ─────────────────────────
     user_risk_pref = user.preferences.risk_profile.value
-    creditworthiness = risk.get("creditworthiness", "medium")
 
-    # Sačuvana ušteda (ne investirana)
     saved_buffer = user.financial.savings - simulation_choice.savings_to_invest
     total_invested = simulation_choice.savings_to_invest + simulation_choice.loan_amount
 
     return {
-        "user_summary": _build_user_summary(user, country),
+        "user_summary": _build_user_summary(user),
         "risk": _build_risk_section(user, risk),
         "interest": interest,
         "loan": loan,
@@ -330,12 +282,14 @@ async def run_simulation_pipeline(user, simulation_choice) -> dict:
 
 
 # ─────────────────────────
-# 🛠️ HELPERS — refaktorisanje da ne dupliraju kod
+# 🛠️ HELPERS (California-aware)
 # ─────────────────────────
-def _build_user_summary(user, country: str) -> dict:
+def _build_user_summary(user) -> dict:
+    """Builds user_summary with California region instead of country."""
     return {
-        "country": country,
+        "region": user.location.region.value,
         "city": user.location.city,
+        "country": "US",  # backward compat for downstream consumers
         "age": user.personal.age,
         "income": user.financial.income,
         "expenses": user.financial.expenses,
@@ -348,6 +302,7 @@ def _build_user_summary(user, country: str) -> dict:
 
 
 def _build_risk_section(user, risk: dict) -> dict:
+    """Builds risk section with California enrichments."""
     user_risk_pref = user.preferences.risk_profile.value
     creditworthiness = risk.get("creditworthiness", "medium")
     risk_explanation = build_risk_explanation(user_risk_pref, creditworthiness)
@@ -357,9 +312,23 @@ def _build_risk_section(user, risk: dict) -> dict:
         "explanation": risk_explanation,
         "score": risk["adjusted_score"],
         "level": risk["level"],
-        "country": risk["country"],
-        "country_factor": risk["country_factor"],
+
+        # California enrichments
+        "region": risk["region"],
+        "region_display_name": risk["region_display_name"],
+        "region_factor": risk["region_factor"],
+        "cost_of_living_index": risk["cost_of_living_index"],
+        "real_disposable_income": risk["real_disposable_income"],
+        "real_savings": risk["real_savings"],
+        "industry_adjustment": risk["industry_adjustment"],
+        "equity_bonus": risk["equity_bonus"],
+
+        # Standard outputs
         "disposable_income": risk["disposable_income"],
         "debt_ratio": risk["debt_ratio"],
         "base_score": risk["base_score"],
+
+        # Backward compat
+        "country": "US",
+        "country_factor": risk["region_factor"],
     }
