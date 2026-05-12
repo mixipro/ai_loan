@@ -22,7 +22,7 @@ def calculate_score(real_roi: float, risk: float, stability: float) -> float:
 # 🔍 CORE ENGINE
 # ─────────────────────────
 def evaluate_investments(user, agents_results: list, loan: dict) -> list:
-    country = user.location.country.value
+    # ⭐ California: only USD, no country needed
     currency = user.financial.currency.value
 
     results = []
@@ -35,11 +35,10 @@ def evaluate_investments(user, agents_results: list, loan: dict) -> list:
 
         agent_type = AgentType(agent_name)
 
-        # 📉 REAL ROI
+        # 📉 REAL ROI (California-only — uses US inflation baseline)
         real_roi = real_return(
             nominal_return=nominal,
             agent=agent_type,
-            country=country,
             currency=currency
         )
 

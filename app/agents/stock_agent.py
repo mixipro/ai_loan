@@ -2,9 +2,10 @@
 
 from app.agents._common import (
     parse_llm_json, clamp, safe_list, safe_str, safe_dict,
-    call_llm_with_tools  # ⭐ NOVO
+    call_llm_with_tools
 )
-from app.agents._tools import STOCK_TOOLS  # ⭐ NOVO
+from app.agents._tools import STOCK_TOOLS
+from app.core.california_config import REGION_DATA
 
 HOURS_STOCK_DESCRIPTIONS = {
     "0-5": "Less than 5h/week (PASSIVE — set-and-forget ETFs only)",
@@ -25,17 +26,37 @@ def build_prompt(user, loan: dict) -> str:
         "Unknown availability"
     )
 
+    # ⭐ California context
+    region_data = REGION_DATA[user.location.region]
+
+    # Check for QSBS opportunity (tech equity)
+    qsbs_note = ""
+    if user.professional.equity_compensation:
+        from app.models.user import EquityCompensation
+        if user.professional.equity_compensation in (
+                EquityCompensation.ISO,
+                EquityCompensation.FOUNDER_STOCK,
+                EquityCompensation.MIXED,
+        ):
+            qsbs_note = (
+                "\n⚠️ USER HAS EQUITY COMPENSATION — they may qualify for QSBS "
+                "(Section 1202) exclusion: up to $10M federal+state tax-free on startup exit. "
+                "Consider mentioning portfolio diversification away from employer stock."
+            )
+
     return f"""
-You are a senior portfolio manager and stock market strategist.
+You are a senior California-aware portfolio manager and stock market strategist.
 
 USER PROFILE:
 - Age: {user.personal.age}
-- Country: {user.location.country.value}
-- Currency: {user.financial.currency.value}
+- Region: {region_data['display_name']} (California, USA)
+- City: {user.location.city}
+- Currency: USD
 - Weekly hours available: {hours_desc}
+- Cost of living: {region_data['cost_of_living_index']}x national average
 
 FINANCIAL DATA:
-- Total available capital: {round(total_capital, 2)} {user.financial.currency.value}
+- Total available capital: ${round(total_capital, 2)} USD
 
 LOAN CONDITIONS:
 - Approved: {loan.get("approved")}
@@ -44,6 +65,13 @@ LOAN CONDITIONS:
 PREFERENCES:
 - Risk tolerance: {user.preferences.risk_profile.value}
 - Investment horizon: {user.preferences.horizon.value} years
+
+🌴 CALIFORNIA TAX CONTEXT:
+- California treats capital gains as ORDINARY INCOME (up to 13.3% state)
+- For high earners, total tax on gains: federal 20% + state 13.3% = 33.3%
+- Tax-advantaged accounts (401k, Roth IRA, HSA) crucial for CA residents
+- California municipal bonds: DOUBLE tax-free (federal + state)
+{qsbs_note}
 
 ═══════════════════════════════════════════════════════════
 🛠️ MANDATORY WORKFLOW (DO NOT SKIP):
@@ -69,18 +97,19 @@ YOUR TASK:
 Generate a portfolio strategy that:
 - Uses tool-provided allocation (DO NOT modify percentages)
 - Uses tool-provided metrics (DO NOT modify return/risk/stability)
+- Mentions California tax efficiency where relevant (Roth IRA, CA muni bonds, QSBS)
 - Adds creative, personalized: title, description, pros, cons, next_steps
 
 REQUIRED FIELDS:
-1. title — short portfolio name (e.g., "Conservative Dividend Portfolio")
-2. description — what this portfolio invests in and why (2-3 sentences)
+1. title — short portfolio name (e.g., "California Tax-Aware Growth Portfolio")
+2. description — what this portfolio invests in and California angle (2-3 sentences)
 3. allocation — EXACTLY from calculate_stock_allocation tool
 4. expected_return — EXACTLY from calculate_expected_return tool
 5. risk — EXACTLY from calculate_expected_return tool
 6. stability — EXACTLY from calculate_expected_return tool
-7. pros — 3 advantages (BE CREATIVE, personalize)
-8. cons — 2 risks (BE CREATIVE, personalize)
-9. next_steps — 3 concrete actions (broker, account type, first ETFs)
+7. pros — 3 advantages (BE CREATIVE, mention CA-specific benefits if relevant)
+8. cons — 2 risks (BE CREATIVE)
+9. next_steps — 3 concrete actions (broker, account type — prefer Roth IRA for CA residents, first ETFs)
 10. time_to_profit — realistic horizon
 
 STRICT RULES:
@@ -112,7 +141,6 @@ FORMAT:
 async def generate_stock_strategy_llm(user, loan: dict) -> dict:
     prompt = build_prompt(user, loan)
 
-    # ⭐ KORISTI TOOLS
     return await call_llm_with_tools(
         prompt=prompt,
         tools=STOCK_TOOLS,

@@ -3,19 +3,42 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI Investment Advisor</title>
+    <title>CaliforniaCFO — AI Financial Advisor</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <style>
+        * { font-family: 'Inter', sans-serif; }
+
+        .ca-gradient {
+            background: linear-gradient(135deg, #FFCC00 0%, #F97316 50%, #B91C1C 100%);
+        }
+
+        .ca-bg {
+            background: linear-gradient(135deg, #fff7ed 0%, #fef3c7 50%, #fee2e2 100%);
+            min-height: 100vh;
+        }
+
         .strategy-card { transition: all 0.2s; }
-        .strategy-card:hover { transform: translateY(-2px); }
-        .interest-chip { cursor: pointer; user-select: none; }
-        .interest-chip.selected { background: #3b82f6; color: white; }
+        .strategy-card:hover { transform: translateY(-2px); box-shadow: 0 10px 20px rgba(0,0,0,0.1); }
+
+        .interest-chip {
+            cursor: pointer;
+            user-select: none;
+            transition: all 0.15s;
+        }
+        .interest-chip:hover { background: #fed7aa; }
+        .interest-chip.selected {
+            background: #F97316;
+            color: white;
+            font-weight: 600;
+        }
+
         .loading-spinner {
-            border: 4px solid #f3f3f3;
-            border-top: 4px solid #3b82f6;
+            border: 4px solid #fef3c7;
+            border-top: 4px solid #F97316;
             border-radius: 50%;
-            width: 40px;
-            height: 40px;
+            width: 50px;
+            height: 50px;
             animation: spin 1s linear infinite;
             margin: 0 auto;
         }
@@ -23,204 +46,338 @@
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
         }
+
+        .ca-button {
+            background: linear-gradient(135deg, #F97316 0%, #B91C1C 100%);
+            transition: all 0.2s;
+        }
+        .ca-button:hover {
+            background: linear-gradient(135deg, #EA580C 0%, #991B1B 100%);
+            transform: translateY(-1px);
+            box-shadow: 0 10px 25px rgba(249, 115, 22, 0.4);
+        }
+
+        .section-divider {
+            border-top: 2px dashed #FCD34D;
+            margin: 1.5rem 0;
+        }
+
+        .ca-badge {
+            background: linear-gradient(90deg, #FFCC00, #F97316);
+            color: white;
+            font-weight: 600;
+            text-shadow: 0 1px 2px rgba(0,0,0,0.1);
+        }
+
+        .advanced-toggle {
+            background: linear-gradient(135deg, #fef3c7 0%, #fed7aa 100%);
+            border: 2px dashed #F97316;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .advanced-toggle:hover {
+            background: linear-gradient(135deg, #fde68a 0%, #fdba74 100%);
+        }
+
+        .palm-emoji {
+            display: inline-block;
+            animation: sway 3s ease-in-out infinite;
+        }
+        @keyframes sway {
+            0%, 100% { transform: rotate(-5deg); }
+            50% { transform: rotate(5deg); }
+        }
     </style>
 </head>
-<body class="bg-gradient-to-br from-slate-50 to-blue-50 min-h-screen">
+<body class="ca-bg">
 
 <div class="max-w-6xl mx-auto p-6">
 
-    <!-- HEADER -->
+    <!-- ═══════════════ HEADER ═══════════════ -->
     <header class="text-center mb-8 pt-6">
-        <h1 class="text-4xl font-bold text-gray-800 mb-2">
-            🤖 AI Investment & Loan Advisor
+        <div class="inline-block ca-gradient text-white px-6 py-2 rounded-full text-sm font-bold mb-4 shadow-lg">
+            <span class="palm-emoji">🌴</span> SPECIALIZED FOR CALIFORNIA, USA
+        </div>
+        <h1 class="text-5xl font-extrabold text-gray-900 mb-2">
+            California<span class="text-orange-600">CFO</span>
         </h1>
-        <p class="text-gray-600">Multi-agent financial advisor with custom calculator</p>
+        <p class="text-lg text-gray-700 font-medium">
+            AI Financial Advisor That Actually Knows California
+        </p>
+        <p class="text-sm text-gray-600 mt-2">
+            Real California data · Prop 13 · QSBS · 8 regions · 115+ cities
+        </p>
     </header>
 
     <!-- API status -->
-    <div id="api-status" class="mb-4 p-3 rounded-lg text-center text-sm bg-yellow-100 text-yellow-800">
-        ⏳ Loading options from server...
+    <div id="api-status" class="mb-4 p-3 rounded-lg text-center text-sm bg-yellow-100 text-yellow-800 border-2 border-yellow-300">
+        ⏳ Loading California data from server...
     </div>
 
     <!-- ═══════════════ SECTION 1: USER FORM ═══════════════ -->
-    <section id="form-section" class="bg-white rounded-2xl shadow-lg p-8 mb-6 hidden">
-        <h2 class="text-2xl font-bold text-gray-800 mb-6">
-            📋 Your Profile
+    <section id="form-section" class="bg-white rounded-2xl shadow-xl p-8 mb-6 hidden border-t-4 border-orange-500">
+        <h2 class="text-2xl font-bold text-gray-800 mb-6 flex items-center gap-2">
+            📋 Your California Profile
         </h2>
 
         <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
 
             <!-- LEFT COLUMN -->
             <div class="space-y-4">
-                <h3 class="font-semibold text-gray-700 border-b pb-2">Personal</h3>
+                <h3 class="font-bold text-orange-700 border-b-2 border-orange-200 pb-2 flex items-center gap-2">
+                    👤 Personal
+                </h3>
 
                 <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-1">Age</label>
+                    <label class="block text-sm font-semibold text-gray-700 mb-1">Age</label>
                     <input type="number" id="age" min="18" max="100" value="32"
-                           class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500">
+                           class="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500">
                 </div>
 
-                <h3 class="font-semibold text-gray-700 border-b pb-2 pt-4">Location</h3>
+                <h3 class="font-bold text-orange-700 border-b-2 border-orange-200 pb-2 pt-4 flex items-center gap-2">
+                    🌴 California Location
+                </h3>
 
                 <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-1">Country</label>
-                    <select id="country" class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500">
-                    </select>
+                    <label class="block text-sm font-semibold text-gray-700 mb-1">
+                        Region <span class="ca-badge text-xs px-2 py-0.5 rounded ml-1">CALIFORNIA</span>
+                    </label>
+                    <select id="region" class="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"></select>
+                    <p id="region-description" class="text-xs text-gray-500 mt-1 italic"></p>
                 </div>
 
                 <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-1">City</label>
-                    <select id="city" class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500">
-                    </select>
+                    <label class="block text-sm font-semibold text-gray-700 mb-1">City</label>
+                    <select id="city" class="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"></select>
                 </div>
 
-                <h3 class="font-semibold text-gray-700 border-b pb-2 pt-4">Financial</h3>
+                <h3 class="font-bold text-orange-700 border-b-2 border-orange-200 pb-2 pt-4 flex items-center gap-2">
+                    💰 Financial (USD)
+                </h3>
 
                 <div class="grid grid-cols-2 gap-3">
                     <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-1">Monthly income</label>
-                        <input type="number" id="income" value="8000" min="0"
-                               class="w-full px-4 py-2 border rounded-lg">
+                        <label class="block text-sm font-semibold text-gray-700 mb-1">Monthly income</label>
+                        <input type="number" id="income" value="12000" min="0"
+                               class="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:ring-2 focus:ring-orange-500">
                     </div>
                     <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-1">Monthly expenses</label>
-                        <input type="number" id="expenses" value="2500" min="0"
-                               class="w-full px-4 py-2 border rounded-lg">
+                        <label class="block text-sm font-semibold text-gray-700 mb-1">Monthly expenses</label>
+                        <input type="number" id="expenses" value="5000" min="0"
+                               class="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:ring-2 focus:ring-orange-500">
                     </div>
                     <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-1">Monthly debt</label>
+                        <label class="block text-sm font-semibold text-gray-700 mb-1">Monthly debt</label>
                         <input type="number" id="monthly_debt" value="500" min="0"
-                               class="w-full px-4 py-2 border rounded-lg">
+                               class="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:ring-2 focus:ring-orange-500">
                     </div>
                     <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-1">Savings</label>
-                        <input type="number" id="savings" value="50000" min="0"
-                               class="w-full px-4 py-2 border rounded-lg">
+                        <label class="block text-sm font-semibold text-gray-700 mb-1">Savings</label>
+                        <input type="number" id="savings" value="60000" min="0"
+                               class="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:ring-2 focus:ring-orange-500">
                     </div>
                 </div>
 
                 <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-1">Currency</label>
-                    <select id="currency" class="w-full px-4 py-2 border rounded-lg">
+                    <label class="block text-sm font-semibold text-gray-700 mb-1">Currency</label>
+                    <select id="currency" class="w-full px-4 py-2 border-2 border-gray-200 rounded-lg bg-gray-50" disabled>
+                        <option>USD</option>
                     </select>
+                    <p class="text-xs text-gray-500 mt-1 italic">CaliforniaCFO uses USD only</p>
                 </div>
             </div>
 
             <!-- RIGHT COLUMN -->
             <div class="space-y-4">
-                <h3 class="font-semibold text-gray-700 border-b pb-2">Professional</h3>
+                <h3 class="font-bold text-orange-700 border-b-2 border-orange-200 pb-2 flex items-center gap-2">
+                    💼 Professional
+                </h3>
 
                 <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-1">Sector</label>
-                    <select id="sector" class="w-full px-4 py-2 border rounded-lg">
-                    </select>
+                    <label class="block text-sm font-semibold text-gray-700 mb-1">Sector</label>
+                    <select id="sector" class="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:ring-2 focus:ring-orange-500"></select>
                 </div>
 
                 <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-1">Profession</label>
-                    <select id="profession" class="w-full px-4 py-2 border rounded-lg">
-                    </select>
+                    <label class="block text-sm font-semibold text-gray-700 mb-1">Profession</label>
+                    <select id="profession" class="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:ring-2 focus:ring-orange-500"></select>
                 </div>
 
                 <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-1">Employment status</label>
-                    <select id="employment_status" class="w-full px-4 py-2 border rounded-lg">
-                    </select>
+                    <label class="block text-sm font-semibold text-gray-700 mb-1">Employment status</label>
+                    <select id="employment_status" class="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:ring-2 focus:ring-orange-500"></select>
                 </div>
 
                 <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-1">Weekly hours for business</label>
-                    <select id="weekly_hours" class="w-full px-4 py-2 border rounded-lg">
-                    </select>
+                    <label class="block text-sm font-semibold text-gray-700 mb-1">Weekly hours available for business</label>
+                    <select id="weekly_hours" class="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:ring-2 focus:ring-orange-500"></select>
                 </div>
 
                 <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-1">
+                    <label class="block text-sm font-semibold text-gray-700 mb-1">
                         Interests <span class="text-gray-400 text-xs">(click to select)</span>
                     </label>
-                    <div id="interests-chips" class="flex flex-wrap gap-2 mb-2 max-h-40 overflow-y-auto p-2 bg-gray-50 rounded-lg">
-                    </div>
+                    <div id="interests-chips" class="flex flex-wrap gap-2 mb-2 max-h-40 overflow-y-auto p-2 bg-orange-50 rounded-lg border border-orange-200"></div>
                     <input type="text" id="custom_interest" placeholder="Add custom interest + Enter"
-                           class="w-full px-3 py-1 border rounded-lg text-sm">
+                           class="w-full px-3 py-1 border-2 border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-orange-500">
                 </div>
 
                 <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-1">
-                        Prior experience <span class="text-gray-400 text-xs">(optional, max 500 chars)</span>
+                    <label class="block text-sm font-semibold text-gray-700 mb-1">
+                        Prior experience <span class="text-gray-400 text-xs">(optional)</span>
                     </label>
                     <textarea id="prior_experience" rows="2" maxlength="500"
-                              placeholder="e.g. I ran a startup for 2 years..."
-                              class="w-full px-3 py-2 border rounded-lg text-sm"></textarea>
-                </div>
-
-                <h3 class="font-semibold text-gray-700 border-b pb-2 pt-4">Preferences</h3>
-
-                <div class="grid grid-cols-2 gap-3">
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-1">Risk tolerance</label>
-                        <select id="risk_profile" class="w-full px-4 py-2 border rounded-lg">
-                        </select>
-                    </div>
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-1">Investment horizon</label>
-                        <select id="horizon" class="w-full px-4 py-2 border rounded-lg">
-                        </select>
-                    </div>
+                              placeholder="e.g. I ran a SaaS startup in SF for 2 years..."
+                              class="w-full px-3 py-2 border-2 border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-orange-500"></textarea>
                 </div>
             </div>
         </div>
 
+        <!-- ⭐ CALIFORNIA-SPECIFIC ADVANCED SECTION -->
+        <div class="mt-6">
+            <div id="advanced-toggle" class="advanced-toggle rounded-xl p-4 text-center">
+                <h3 class="font-bold text-orange-800 flex items-center justify-center gap-2">
+                    🌴 California-Specific Details
+                    <span class="text-xs bg-orange-600 text-white px-2 py-0.5 rounded-full">CLICK TO EXPAND</span>
+                </h3>
+                <p class="text-xs text-gray-600 mt-1">Tech equity, entertainment industry roles, QSBS eligibility</p>
+            </div>
+
+            <div id="advanced-section" class="hidden mt-4 bg-gradient-to-br from-orange-50 to-yellow-50 rounded-xl p-6 border-2 border-orange-200">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-semibold text-gray-700 mb-1">
+                            🖥️ Tech Role <span class="text-gray-400 text-xs">(if applicable)</span>
+                        </label>
+                        <select id="tech_role" class="w-full px-4 py-2 border-2 border-orange-200 rounded-lg focus:ring-2 focus:ring-orange-500">
+                            <option value="">-- Not applicable --</option>
+                        </select>
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-semibold text-gray-700 mb-1">
+                            💎 Equity Compensation
+                        </label>
+                        <select id="equity_compensation" class="w-full px-4 py-2 border-2 border-orange-200 rounded-lg focus:ring-2 focus:ring-orange-500">
+                            <option value="">-- None --</option>
+                        </select>
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-semibold text-gray-700 mb-1">
+                            🏢 Company Stage
+                        </label>
+                        <select id="company_stage" class="w-full px-4 py-2 border-2 border-orange-200 rounded-lg focus:ring-2 focus:ring-orange-500">
+                            <option value="">-- Not applicable --</option>
+                        </select>
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-semibold text-gray-700 mb-1">
+                            🎬 Entertainment Role <span class="text-gray-400 text-xs">(LA-specific)</span>
+                        </label>
+                        <select id="entertainment_role" class="w-full px-4 py-2 border-2 border-orange-200 rounded-lg focus:ring-2 focus:ring-orange-500">
+                            <option value="">-- Not applicable --</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="mt-4 bg-yellow-50 border-2 border-yellow-300 rounded-lg p-3">
+                    <label class="flex items-center gap-2 cursor-pointer">
+                        <input type="checkbox" id="qsbs_eligible" class="w-5 h-5 text-orange-600 rounded">
+                        <div>
+                            <span class="font-bold text-gray-800">QSBS Eligible? 💎</span>
+                            <p class="text-xs text-gray-600 mt-0.5">
+                                Section 1202 — up to $10M tax-free on qualified startup stock exits (5+ years)
+                            </p>
+                        </div>
+                    </label>
+                </div>
+            </div>
+        </div>
+
+        <!-- PREFERENCES -->
+        <div class="section-divider"></div>
+        <h3 class="font-bold text-orange-700 border-b-2 border-orange-200 pb-2 flex items-center gap-2 mb-4">
+            ⚙️ Investment Preferences
+        </h3>
+        <div class="grid grid-cols-2 gap-3">
+            <div>
+                <label class="block text-sm font-semibold text-gray-700 mb-1">Risk tolerance</label>
+                <select id="risk_profile" class="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:ring-2 focus:ring-orange-500"></select>
+            </div>
+            <div>
+                <label class="block text-sm font-semibold text-gray-700 mb-1">Investment horizon (years)</label>
+                <select id="horizon" class="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:ring-2 focus:ring-orange-500"></select>
+            </div>
+        </div>
+
         <button id="analyze-btn"
-                class="mt-8 w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 px-6 rounded-lg shadow-lg transition">
-            🚀 Analyze my profile
+                class="ca-button mt-8 w-full text-white font-bold py-4 px-6 rounded-xl shadow-xl text-lg">
+            🚀 Analyze My California Profile
         </button>
     </section>
 
-    <!-- ═══════════════ SECTION 2: RESULTS ═══════════════ -->
-    <section id="loading-section" class="hidden bg-white rounded-2xl shadow-lg p-12 mb-6 text-center">
+    <!-- ═══════════════ LOADING ═══════════════ -->
+    <section id="loading-section" class="hidden bg-white rounded-2xl shadow-xl p-12 mb-6 text-center border-t-4 border-orange-500">
         <div class="loading-spinner"></div>
-        <p class="mt-4 text-gray-600">Agents analyzing your profile... (5-15 seconds)</p>
+        <p class="mt-4 text-gray-700 font-semibold">🌴 California agents analyzing your profile...</p>
+        <p class="text-sm text-gray-500 mt-1">Bay Area Tech · LA Entertainment · SD Biotech · Sacramento Govt...</p>
     </section>
 
+    <!-- ═══════════════ RESULTS ═══════════════ -->
     <section id="results-section" class="hidden">
+
+        <!-- 🌟 REALITY CHECK BANNER (Phase 5 placeholder) -->
+        <div id="reality-check-banner" class="hidden mb-6 bg-gradient-to-br from-blue-50 to-cyan-50 rounded-2xl shadow-lg p-6 border-2 border-blue-300">
+            <h3 class="text-lg font-bold text-blue-800 mb-3 flex items-center gap-2">
+                📡 California Reality Check
+                <span class="text-xs bg-blue-200 text-blue-800 px-2 py-0.5 rounded-full">LIVE DATA</span>
+            </h3>
+            <div id="reality-check-content" class="text-sm text-gray-700">
+                <p class="italic">Live market data integration coming in next update.</p>
+            </div>
+        </div>
 
         <!-- Risk + Loan summary -->
         <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-            <div class="bg-white rounded-2xl shadow-lg p-6">
-                <h3 class="text-lg font-bold text-gray-800 mb-4">📊 Your risk profile</h3>
+            <div class="bg-white rounded-2xl shadow-lg p-6 border-t-4 border-orange-500">
+                <h3 class="text-lg font-bold text-gray-800 mb-4">📊 Your Risk Profile</h3>
                 <div id="risk-content"></div>
             </div>
-            <div class="bg-white rounded-2xl shadow-lg p-6">
-                <h3 class="text-lg font-bold text-gray-800 mb-4">💰 Maximum loan offer</h3>
+            <div class="bg-white rounded-2xl shadow-lg p-6 border-t-4 border-yellow-500">
+                <h3 class="text-lg font-bold text-gray-800 mb-4">💰 Maximum Loan Offer</h3>
                 <div id="loan-content"></div>
             </div>
         </div>
 
         <!-- Strategies -->
-        <div class="bg-white rounded-2xl shadow-lg p-6 mb-6">
-            <h3 class="text-lg font-bold text-gray-800 mb-4">🎯 Investment strategies</h3>
+        <div class="bg-white rounded-2xl shadow-lg p-6 mb-6 border-t-4 border-red-500">
+            <h3 class="text-lg font-bold text-gray-800 mb-4">🎯 Investment Strategies</h3>
             <div id="strategies-content" class="grid grid-cols-1 md:grid-cols-3 gap-4"></div>
         </div>
 
-        <!-- Recommendation + reasoning -->
-        <div class="bg-gradient-to-br from-green-50 to-blue-50 rounded-2xl shadow-lg p-6 mb-6 border-2 border-green-300">
-            <h3 class="text-lg font-bold text-gray-800 mb-4">⭐ Our recommendation</h3>
+        <!-- Recommendation -->
+        <div class="ca-gradient rounded-2xl shadow-xl p-6 mb-6 text-white">
+            <h3 class="text-lg font-bold mb-4 flex items-center gap-2">
+                ⭐ Our California Recommendation
+            </h3>
             <div id="recommendation-content"></div>
         </div>
 
-        <!-- ═══════════════ SECTION 3: SIMULATOR ═══════════════ -->
-        <div class="bg-white rounded-2xl shadow-lg p-6 mb-6 border-2 border-blue-200">
-            <h3 class="text-xl font-bold text-gray-800 mb-2">🎛️ Custom simulator</h3>
-            <p class="text-sm text-gray-600 mb-6">Adjust parameters and see how the recommendations change</p>
+        <!-- SIMULATOR -->
+        <div class="bg-white rounded-2xl shadow-xl p-6 mb-6 border-t-4 border-purple-500">
+            <h3 class="text-xl font-bold text-gray-800 mb-2">🎛️ Custom Simulator</h3>
+            <p class="text-sm text-gray-600 mb-6">Adjust parameters to see how recommendations change</p>
 
             <div class="space-y-6">
                 <div>
                     <div class="flex justify-between mb-2">
-                        <label class="font-semibold">Loan amount</label>
-                        <span id="loan-amount-value" class="text-blue-600 font-bold">$0</span>
+                        <label class="font-semibold text-gray-700">Loan amount</label>
+                        <span id="loan-amount-value" class="text-orange-600 font-bold">$0</span>
                     </div>
                     <input type="range" id="sim-loan-amount" min="0" max="100000" step="1000" value="50000"
-                           class="w-full">
+                           class="w-full accent-orange-600">
                     <div class="flex justify-between text-xs text-gray-500 mt-1">
                         <span>$0 (no loan)</span>
                         <span id="loan-max-label">Max</span>
@@ -229,28 +386,27 @@
 
                 <div>
                     <div class="flex justify-between mb-2">
-                        <label class="font-semibold">Repayment period</label>
-                        <span id="loan-years-value" class="text-blue-600 font-bold">5 years</span>
+                        <label class="font-semibold text-gray-700">Repayment period</label>
+                        <span id="loan-years-value" class="text-orange-600 font-bold">5 years</span>
                     </div>
                     <input type="range" id="sim-loan-years" min="1" max="7" value="5"
-                           class="w-full">
+                           class="w-full accent-orange-600">
                 </div>
 
                 <div>
                     <div class="flex justify-between mb-2">
-                        <label class="font-semibold">Savings to invest</label>
-                        <span id="savings-value" class="text-blue-600 font-bold">$0</span>
+                        <label class="font-semibold text-gray-700">Savings to invest</label>
+                        <span id="savings-value" class="text-orange-600 font-bold">$0</span>
                     </div>
                     <input type="range" id="sim-savings" min="0" max="50000" step="500" value="30000"
-                           class="w-full">
+                           class="w-full accent-orange-600">
                     <div class="flex justify-between text-xs text-gray-500 mt-1">
                         <span>$0 (all in reserve)</span>
                         <span id="savings-max-label">Max</span>
                     </div>
                 </div>
 
-                <!-- Live calculation preview -->
-                <div class="bg-blue-50 rounded-lg p-4">
+                <div class="bg-orange-50 rounded-lg p-4 border border-orange-200">
                     <div class="grid grid-cols-2 gap-3 text-sm">
                         <div>
                             <span class="text-gray-600">Monthly payment:</span>
@@ -265,25 +421,36 @@
 
                 <button id="simulate-btn"
                         class="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-3 px-6 rounded-lg shadow-lg transition">
-                    🔄 Run simulation
+                    🔄 Run Simulation
                 </button>
             </div>
         </div>
 
         <div id="simulation-loading" class="hidden bg-white rounded-2xl shadow-lg p-12 mb-6 text-center">
             <div class="loading-spinner"></div>
-            <p class="mt-4 text-gray-600">Computing new strategy...</p>
+            <p class="mt-4 text-gray-700 font-semibold">Computing new strategy...</p>
         </div>
 
-        <div id="simulation-results" class="hidden bg-white rounded-2xl shadow-lg p-6 mb-6">
-            <h3 class="text-lg font-bold text-gray-800 mb-4">🎯 Custom result</h3>
+        <div id="simulation-results" class="hidden bg-white rounded-2xl shadow-lg p-6 mb-6 border-t-4 border-purple-500">
+            <h3 class="text-lg font-bold text-gray-800 mb-4">🎯 Custom Result</h3>
             <div id="simulation-content"></div>
         </div>
     </section>
+
+    <!-- ═══════════════ FOOTER ═══════════════ -->
+    <footer class="text-center text-sm text-gray-600 mt-12 mb-6">
+        <p class="mb-2">
+            <span class="palm-emoji">🌴</span>
+            <strong>CaliforniaCFO</strong> — Specialized for California, USA
+        </p>
+        <p class="text-xs text-gray-500">
+            Multi-agent system · 8 regions · 115+ cities · Prop 13 · QSBS · USD only
+        </p>
+    </footer>
 </div>
 
 <script>
-const API_BASE = '';  // empty = same origin (FastAPI serves both frontend and API)
+const API_BASE = '';
 let OPTIONS = null;
 let currentUserData = null;
 let currentAnalyzeResult = null;
@@ -296,11 +463,13 @@ async function init() {
         OPTIONS = await res.json();
         populateDropdowns();
         renderInterests();
+        setupAdvancedToggle();
         document.getElementById('form-section').classList.remove('hidden');
         document.getElementById('api-status').classList.add('hidden');
     } catch (e) {
-        document.getElementById('api-status').textContent = '❌ Server unavailable';
-        document.getElementById('api-status').className = 'mb-4 p-3 rounded-lg text-center text-sm bg-red-100 text-red-800';
+        const status = document.getElementById('api-status');
+        status.textContent = '❌ Server unavailable: ' + e.message;
+        status.className = 'mb-4 p-3 rounded-lg text-center text-sm bg-red-100 text-red-800 border-2 border-red-300';
     }
 }
 
@@ -310,11 +479,20 @@ function fillSelect(id, items, formatter = i => i) {
     sel.innerHTML = items.map(i => `<option value="${formatter(i)}">${formatter(i)}</option>`).join('');
 }
 
-function populateDropdowns() {
-    document.getElementById('country').innerHTML =
-        OPTIONS.countries.map(c => `<option value="${c.code}">${c.name} (${c.code})</option>`).join('');
+function fillSelectWithEmpty(id, items, formatter = i => i) {
+    const sel = document.getElementById(id);
+    const empty = '<option value="">-- Not applicable --</option>';
+    sel.innerHTML = empty + items.map(i => `<option value="${formatter(i)}">${formatter(i)}</option>`).join('');
+}
 
-    fillSelect('currency', OPTIONS.currencies);
+function populateDropdowns() {
+    // California regions (NEW)
+    const regionSelect = document.getElementById('region');
+    regionSelect.innerHTML = OPTIONS.regions.map(r =>
+        `<option value="${r.value}" data-desc="${r.description}">${r.label}</option>`
+    ).join('');
+
+    // Standard dropdowns
     fillSelect('sector', OPTIONS.sectors);
     fillSelect('profession', OPTIONS.professions);
     fillSelect('employment_status', OPTIONS.employment_statuses);
@@ -322,21 +500,49 @@ function populateDropdowns() {
     fillSelect('horizon', OPTIONS.horizons);
     fillSelect('weekly_hours', OPTIONS.weekly_hours);
 
-    document.getElementById('country').addEventListener('change', updateCities);
+    // California-specific (with empty option)
+    fillSelectWithEmpty('tech_role', OPTIONS.tech_roles);
+    fillSelectWithEmpty('equity_compensation', OPTIONS.equity_compensations);
+    fillSelectWithEmpty('company_stage', OPTIONS.company_stages);
+    fillSelectWithEmpty('entertainment_role', OPTIONS.entertainment_roles);
+
+    // Event listeners
+    regionSelect.addEventListener('change', updateCities);
+    regionSelect.addEventListener('change', updateRegionDescription);
+
     updateCities();
+    updateRegionDescription();
 }
 
 function updateCities() {
-    const country = document.getElementById('country').value;
-    const cities = OPTIONS.cities_by_country[country] || [];
+    const region = document.getElementById('region').value;
+    const cities = OPTIONS.cities_by_region[region] || [];
     fillSelect('city', cities);
+}
+
+function updateRegionDescription() {
+    const region = document.getElementById('region').value;
+    const regionData = OPTIONS.regions.find(r => r.value === region);
+    if (regionData) {
+        const industries = regionData.primary_industries.join(', ');
+        document.getElementById('region-description').textContent =
+            `${regionData.description} · Industries: ${industries}`;
+    }
+}
+
+// ═══════════════ ADVANCED TOGGLE ═══════════════
+function setupAdvancedToggle() {
+    document.getElementById('advanced-toggle').addEventListener('click', () => {
+        const section = document.getElementById('advanced-section');
+        section.classList.toggle('hidden');
+    });
 }
 
 // ═══════════════ INTERESTS CHIPS ═══════════════
 function renderInterests() {
     const container = document.getElementById('interests-chips');
     container.innerHTML = OPTIONS.predefined_interests.map(i =>
-        `<span class="interest-chip px-3 py-1 bg-gray-200 rounded-full text-sm" data-value="${i}">${i}</span>`
+        `<span class="interest-chip px-3 py-1 bg-white border border-orange-300 rounded-full text-sm" data-value="${i}">${i}</span>`
     ).join('');
 
     container.querySelectorAll('.interest-chip').forEach(chip => {
@@ -367,10 +573,32 @@ function getSelectedInterests() {
 
 // ═══════════════ BUILD USER DATA ═══════════════
 function buildUserPayload() {
+    const techRole = document.getElementById('tech_role').value;
+    const equity = document.getElementById('equity_compensation').value;
+    const companyStage = document.getElementById('company_stage').value;
+    const entertainmentRole = document.getElementById('entertainment_role').value;
+    const qsbsEligible = document.getElementById('qsbs_eligible').checked;
+
+    const professional = {
+        sector: document.getElementById('sector').value,
+        profession: document.getElementById('profession').value,
+        employment_status: document.getElementById('employment_status').value,
+        interests: getSelectedInterests(),
+        prior_experience: document.getElementById('prior_experience').value,
+        weekly_hours: document.getElementById('weekly_hours').value
+    };
+
+    // Only include California-specific fields if user filled them
+    if (techRole) professional.tech_role = techRole;
+    if (equity) professional.equity_compensation = equity;
+    if (companyStage) professional.company_stage = companyStage;
+    if (entertainmentRole) professional.entertainment_role = entertainmentRole;
+    if (qsbsEligible) professional.qsbs_eligible = true;
+
     return {
         personal: { age: parseInt(document.getElementById('age').value) },
         location: {
-            country: document.getElementById('country').value,
+            region: document.getElementById('region').value,
             city: document.getElementById('city').value
         },
         financial: {
@@ -378,16 +606,9 @@ function buildUserPayload() {
             expenses: parseInt(document.getElementById('expenses').value),
             monthly_debt: parseInt(document.getElementById('monthly_debt').value),
             savings: parseInt(document.getElementById('savings').value),
-            currency: document.getElementById('currency').value
+            currency: 'USD'
         },
-        professional: {
-            sector: document.getElementById('sector').value,
-            profession: document.getElementById('profession').value,
-            employment_status: document.getElementById('employment_status').value,
-            interests: getSelectedInterests(),
-            prior_experience: document.getElementById('prior_experience').value,
-            weekly_hours: document.getElementById('weekly_hours').value
-        },
+        professional: professional,
         preferences: {
             risk_profile: document.getElementById('risk_profile').value,
             horizon: document.getElementById('horizon').value
@@ -432,6 +653,11 @@ function renderResults(data) {
     // Risk
     document.getElementById('risk-content').innerHTML = `
         <div class="space-y-2 text-sm">
+            <div class="bg-orange-50 rounded-lg p-3 mb-3 border border-orange-200">
+                <div class="text-xs text-gray-600 mb-1">🌴 California Region</div>
+                <div class="font-bold text-orange-800">${data.risk.region_display_name}</div>
+                <div class="text-xs text-gray-500">Cost of living: ${data.risk.cost_of_living_index}x national avg</div>
+            </div>
             <div class="flex justify-between">
                 <span class="text-gray-600">Your preference:</span>
                 <span class="font-bold">${data.user_summary.risk_profile.toUpperCase()}</span>
@@ -442,9 +668,23 @@ function renderResults(data) {
             </div>
             <div class="flex justify-between">
                 <span class="text-gray-600">Score:</span>
-                <span class="font-bold">${data.risk.score}/15</span>
+                <span class="font-bold">${data.risk.score}</span>
             </div>
-            <p class="text-xs text-gray-500 mt-3 italic">${data.risk.explanation}</p>
+            ${data.risk.industry_adjustment !== undefined ? `
+                <div class="flex justify-between">
+                    <span class="text-gray-600">Industry adjustment:</span>
+                    <span class="font-bold ${data.risk.industry_adjustment >= 0 ? 'text-green-600' : 'text-red-600'}">
+                        ${data.risk.industry_adjustment >= 0 ? '+' : ''}${data.risk.industry_adjustment}
+                    </span>
+                </div>
+            ` : ''}
+            ${data.risk.equity_bonus ? `
+                <div class="flex justify-between">
+                    <span class="text-gray-600">💎 Equity bonus:</span>
+                    <span class="font-bold text-purple-600">+${data.risk.equity_bonus}</span>
+                </div>
+            ` : ''}
+            <p class="text-xs text-gray-500 mt-3 italic border-t pt-2">${data.risk.explanation}</p>
         </div>`;
 
     // Loan
@@ -452,8 +692,8 @@ function renderResults(data) {
         document.getElementById('loan-content').innerHTML = `
             <div class="space-y-2 text-sm">
                 <div class="flex justify-between"><span class="text-gray-600">Max amount:</span>
-                    <span class="font-bold text-2xl text-green-600">${formatMoney(data.loan.max_loan_amount, data.user_summary.currency)}</span></div>
-                <div class="flex justify-between"><span>Monthly payment:</span><span class="font-bold">${formatMoney(data.loan.monthly_payment, data.user_summary.currency)}</span></div>
+                    <span class="font-bold text-2xl text-green-600">${formatMoney(data.loan.max_loan_amount, 'USD')}</span></div>
+                <div class="flex justify-between"><span>Monthly payment:</span><span class="font-bold">${formatMoney(data.loan.monthly_payment, 'USD')}</span></div>
                 <div class="flex justify-between"><span>Duration:</span><span class="font-bold">${data.loan.loan_years} years</span></div>
                 <div class="flex justify-between"><span>Interest rate:</span><span class="font-bold">${(data.loan.interest_rate*100).toFixed(2)}%</span></div>
             </div>`;
@@ -465,24 +705,24 @@ function renderResults(data) {
 
     // Strategies
     document.getElementById('strategies-content').innerHTML =
-        data.strategies.map(s => renderStrategyCard(s, data.user_summary.currency)).join('');
+        data.strategies.map(s => renderStrategyCard(s, 'USD')).join('');
 
     // Recommendation
     if (data.recommendation) {
         document.getElementById('recommendation-content').innerHTML = `
-            <h4 class="text-xl font-bold text-green-700 mb-2">${data.recommendation.title}</h4>
-            <p class="text-gray-700 mb-4">${data.reasoning}</p>
-            <div class="bg-white rounded-lg p-4 border-2 border-green-200">
-                <p class="font-semibold text-sm">📌 Next step:</p>
-                <p class="text-sm text-gray-700">${data.next_step}</p>
+            <h4 class="text-xl font-bold mb-2">${data.recommendation.title}</h4>
+            <p class="mb-4 leading-relaxed">${data.reasoning}</p>
+            <div class="bg-white text-gray-800 rounded-lg p-4 border-2 border-white">
+                <p class="font-bold text-sm">📌 Your next step:</p>
+                <p class="text-sm mt-1">${data.next_step}</p>
             </div>`;
     } else {
         document.getElementById('recommendation-content').innerHTML = `
-            <p class="text-red-600">${data.reasoning}</p>`;
+            <p>${data.reasoning}</p>`;
     }
 }
 
-// ═══════════════ STRATEGY CARD (RICH VERSION) ═══════════════
+// ═══════════════ STRATEGY CARD ═══════════════
 function renderStrategyCard(s, currency) {
     const statusColor = {
         'profitable': 'bg-green-100 text-green-800 border-green-300',
@@ -494,15 +734,14 @@ function renderStrategyCard(s, currency) {
     const agentLabel = { 'business': 'Business', 'real_estate': 'Real Estate', 'stock': 'Stock Portfolio' }[s.agent] || s.agent;
 
     const typeBadge = s.type
-        ? `<span class="text-xs px-2 py-0.5 bg-blue-100 text-blue-700 rounded">${s.type}</span>`
+        ? `<span class="text-xs px-2 py-0.5 bg-orange-100 text-orange-700 rounded">${s.type}</span>`
         : '';
 
     const allocationHTML = renderAllocation(s.allocation, currency);
     const cardId = `card-${s.agent}-${Math.random().toString(36).substr(2, 9)}`;
 
     return `
-        <div class="strategy-card border-2 rounded-xl bg-white overflow-hidden">
-            <!-- HEADER -->
+        <div class="strategy-card border-2 border-gray-200 rounded-xl bg-white overflow-hidden">
             <div class="p-4 border-b">
                 <div class="flex justify-between items-start mb-2 gap-2">
                     <div class="flex-1">
@@ -521,8 +760,7 @@ function renderStrategyCard(s, currency) {
                 <p class="text-sm text-gray-600 mt-2">${s.description || ''}</p>
             </div>
 
-            <!-- KEY METRICS -->
-            <div class="p-4 bg-gray-50 grid grid-cols-2 gap-3 text-sm">
+            <div class="p-4 bg-orange-50 grid grid-cols-2 gap-3 text-sm">
                 <div>
                     <div class="text-xs text-gray-500">📊 Real return</div>
                     <div class="font-bold text-base">${(s.real_return*100).toFixed(2)}%</div>
@@ -544,12 +782,11 @@ function renderStrategyCard(s, currency) {
                     <div class="text-xs text-gray-500">🛡️ Stability</div>
                     <div class="font-bold">${(s.stability*100).toFixed(0)}%</div>
                     <div class="w-full bg-gray-200 rounded-full h-1.5 mt-1">
-                        <div class="bg-blue-500 h-1.5 rounded-full" style="width: ${s.stability*100}%"></div>
+                        <div class="bg-yellow-500 h-1.5 rounded-full" style="width: ${s.stability*100}%"></div>
                     </div>
                 </div>
             </div>
 
-            <!-- TIME TO PROFIT -->
             ${s.time_to_profit ? `
                 <div class="px-4 py-2 bg-yellow-50 border-t text-xs">
                     ⏱️ <span class="text-gray-600">Time to profit:</span>
@@ -557,22 +794,17 @@ function renderStrategyCard(s, currency) {
                 </div>
             ` : ''}
 
-            <!-- TOGGLE DETAILS BUTTON -->
             <button onclick="document.getElementById('${cardId}').classList.toggle('hidden')"
-                    class="w-full px-4 py-2 text-sm text-blue-600 hover:bg-blue-50 border-t font-medium transition">
+                    class="w-full px-4 py-2 text-sm text-orange-600 hover:bg-orange-50 border-t font-medium transition">
                 Show details ▼
             </button>
 
-            <!-- EXPANDED DETAILS -->
             <div id="${cardId}" class="hidden p-4 border-t space-y-4 bg-gray-50">
-
-                <!-- ALLOCATION -->
                 <div>
                     <h5 class="font-semibold text-sm text-gray-700 mb-2">💰 Capital allocation</h5>
                     ${allocationHTML}
                 </div>
 
-                <!-- PROS -->
                 ${s.pros && s.pros.length ? `
                     <div>
                         <h5 class="font-semibold text-sm text-green-700 mb-2">✅ Pros</h5>
@@ -582,7 +814,6 @@ function renderStrategyCard(s, currency) {
                     </div>
                 ` : ''}
 
-                <!-- CONS -->
                 ${s.cons && s.cons.length ? `
                     <div>
                         <h5 class="font-semibold text-sm text-red-700 mb-2">⚠️ Cons</h5>
@@ -592,24 +823,21 @@ function renderStrategyCard(s, currency) {
                     </div>
                 ` : ''}
 
-                <!-- NEXT STEPS -->
                 ${s.next_steps && s.next_steps.length ? `
                     <div>
-                        <h5 class="font-semibold text-sm text-blue-700 mb-2">🎯 Next steps</h5>
+                        <h5 class="font-semibold text-sm text-orange-700 mb-2">🎯 Next steps</h5>
                         <ol class="space-y-1 text-xs text-gray-700 list-decimal list-inside">
                             ${s.next_steps.map(n => `<li>${n}</li>`).join('')}
                         </ol>
                     </div>
                 ` : ''}
 
-                <!-- WARNING -->
                 ${s.warning ? `
                     <div class="bg-yellow-100 border-l-4 border-yellow-500 p-3 text-xs text-yellow-800">
                         ⚠️ ${s.warning}
                     </div>
                 ` : ''}
 
-                <!-- SCORES -->
                 <div class="pt-2 border-t flex justify-between text-xs text-gray-500">
                     <span>Score: <strong>${(s.score || 0).toFixed(4)}</strong></span>
                     ${s.personalized_score ? `<span>Personalized: <strong>${s.personalized_score.toFixed(4)}</strong></span>` : ''}
@@ -618,7 +846,6 @@ function renderStrategyCard(s, currency) {
         </div>`;
 }
 
-// ═══════════════ ALLOCATION RENDERING ═══════════════
 function renderAllocation(allocation, currency) {
     if (!allocation || Object.keys(allocation).length === 0) {
         return '<p class="text-xs text-gray-500 italic">No allocation data</p>';
@@ -647,20 +874,18 @@ function renderAllocation(allocation, currency) {
                 }
 
                 const colors = {
-                    'down_payment': 'bg-blue-500',
-                    'initial_investment': 'bg-blue-500',
+                    'down_payment': 'bg-orange-500',
+                    'initial_investment': 'bg-orange-500',
                     'working_capital': 'bg-green-500',
                     'marketing_budget': 'bg-purple-500',
                     'reserve': 'bg-yellow-500',
                     'emergency_fund': 'bg-yellow-500',
                     'taxes_and_fees': 'bg-red-400',
-                    'renovation_reserve': 'bg-orange-400',
+                    'renovation_reserve': 'bg-pink-400',
                 };
                 const color = colors[key] || 'bg-gray-400';
 
-                const prettyKey = key
-                    .replace(/_/g, ' ')
-                    .replace(/\b\w/g, c => c.toUpperCase());
+                const prettyKey = key.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
 
                 return `
                     <div>
@@ -684,9 +909,8 @@ function renderAllocation(allocation, currency) {
     `;
 }
 
-function formatMoney(amount, currency) {
-    const symbol = { 'USD': '$', 'EUR': '€' }[currency] || currency;
-    return `${symbol}${(amount || 0).toLocaleString('en-US', { maximumFractionDigits: 2 })}`;
+function formatMoney(amount, currency = 'USD') {
+    return `$${(amount || 0).toLocaleString('en-US', { maximumFractionDigits: 2 })}`;
 }
 
 // ═══════════════ SIMULATOR ═══════════════
@@ -694,12 +918,11 @@ function configureSimulator(data) {
     const maxLoan = data.loan.approved ? data.loan.max_loan_amount : 0;
     const maxYears = data.loan.approved ? data.loan.loan_years : 7;
     const maxSavings = data.user_summary.savings;
-    const currency = data.user_summary.currency;
 
     const loanSlider = document.getElementById('sim-loan-amount');
     loanSlider.max = maxLoan;
     loanSlider.value = Math.min(maxLoan / 2, maxLoan);
-    document.getElementById('loan-max-label').textContent = formatMoney(maxLoan, currency);
+    document.getElementById('loan-max-label').textContent = formatMoney(maxLoan, 'USD');
 
     const yearsSlider = document.getElementById('sim-loan-years');
     yearsSlider.max = maxYears;
@@ -708,22 +931,21 @@ function configureSimulator(data) {
     const savingsSlider = document.getElementById('sim-savings');
     savingsSlider.max = maxSavings;
     savingsSlider.value = Math.min(maxSavings * 0.6, maxSavings);
-    document.getElementById('savings-max-label').textContent = formatMoney(maxSavings, currency);
+    document.getElementById('savings-max-label').textContent = formatMoney(maxSavings, 'USD');
 
     [loanSlider, yearsSlider, savingsSlider].forEach(s => s.addEventListener('input', updateSliderDisplay));
     updateSliderDisplay();
 }
 
 function updateSliderDisplay() {
-    const currency = currentAnalyzeResult.user_summary.currency;
     const loan = parseFloat(document.getElementById('sim-loan-amount').value);
     const years = parseInt(document.getElementById('sim-loan-years').value);
     const savings = parseFloat(document.getElementById('sim-savings').value);
     const rate = currentAnalyzeResult.loan.interest_rate || 0;
 
-    document.getElementById('loan-amount-value').textContent = formatMoney(loan, currency);
+    document.getElementById('loan-amount-value').textContent = formatMoney(loan, 'USD');
     document.getElementById('loan-years-value').textContent = `${years} years`;
-    document.getElementById('savings-value').textContent = formatMoney(savings, currency);
+    document.getElementById('savings-value').textContent = formatMoney(savings, 'USD');
 
     let monthly = 0;
     if (loan > 0 && rate > 0) {
@@ -731,8 +953,8 @@ function updateSliderDisplay() {
         const monthlyRate = rate / 12;
         monthly = loan * monthlyRate * Math.pow(1 + monthlyRate, months) / (Math.pow(1 + monthlyRate, months) - 1);
     }
-    document.getElementById('preview-monthly').textContent = formatMoney(monthly, currency);
-    document.getElementById('preview-total').textContent = formatMoney(loan + savings, currency);
+    document.getElementById('preview-monthly').textContent = formatMoney(monthly, 'USD');
+    document.getElementById('preview-total').textContent = formatMoney(loan + savings, 'USD');
 }
 
 // ═══════════════ SIMULATE ═══════════════
@@ -771,29 +993,28 @@ document.getElementById('simulate-btn').addEventListener('click', async () => {
 });
 
 function renderSimulation(data) {
-    const currency = data.user_summary.currency;
     const sim = data.simulation;
 
     document.getElementById('simulation-results').classList.remove('hidden');
     document.getElementById('simulation-content').innerHTML = `
-        <div class="bg-blue-50 rounded-lg p-4 mb-4">
+        <div class="bg-purple-50 rounded-lg p-4 mb-4 border border-purple-200">
             <h4 class="font-bold mb-2">📊 Your parameters</h4>
             <div class="grid grid-cols-2 gap-2 text-sm">
-                <div>Loan: <strong>${formatMoney(sim.user_chose.loan_amount, currency)}</strong></div>
+                <div>Loan: <strong>${formatMoney(sim.user_chose.loan_amount, 'USD')}</strong></div>
                 <div>Period: <strong>${sim.user_chose.loan_years} yrs</strong></div>
-                <div>Investment from savings: <strong>${formatMoney(sim.user_chose.savings_to_invest, currency)}</strong></div>
-                <div>Buffer: <strong>${formatMoney(sim.calculated.savings_kept_as_buffer, currency)}</strong></div>
-                <div>Monthly payment: <strong>${formatMoney(sim.calculated.monthly_payment, currency)}</strong></div>
-                <div>Total invested: <strong class="text-green-600">${formatMoney(sim.calculated.total_capital_invested, currency)}</strong></div>
+                <div>Investment from savings: <strong>${formatMoney(sim.user_chose.savings_to_invest, 'USD')}</strong></div>
+                <div>Buffer: <strong>${formatMoney(sim.calculated.savings_kept_as_buffer, 'USD')}</strong></div>
+                <div>Monthly payment: <strong>${formatMoney(sim.calculated.monthly_payment, 'USD')}</strong></div>
+                <div>Total invested: <strong class="text-green-600">${formatMoney(sim.calculated.total_capital_invested, 'USD')}</strong></div>
             </div>
         </div>
         <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
-            ${data.strategies.map(s => renderStrategyCard(s, currency)).join('')}
+            ${data.strategies.map(s => renderStrategyCard(s, 'USD')).join('')}
         </div>
         ${data.recommendation ? `
-            <div class="bg-green-50 rounded-lg p-4 border-2 border-green-300">
-                <h4 class="font-bold text-green-700 mb-2">⭐ Recommendation: ${data.recommendation.title}</h4>
-                <p class="text-sm text-gray-700">${data.reasoning}</p>
+            <div class="ca-gradient rounded-lg p-4 text-white">
+                <h4 class="font-bold mb-2">⭐ Recommendation: ${data.recommendation.title}</h4>
+                <p class="text-sm">${data.reasoning}</p>
             </div>
         ` : ''}
     `;
