@@ -1,5 +1,6 @@
 from copy import deepcopy
 
+import pytest
 from fastapi.testclient import TestClient
 
 from app.api import routes as api_routes
@@ -9,54 +10,71 @@ from app.main import app
 client = TestClient(app)
 
 
+@pytest.fixture
+def valid_user_payload():
+    return {
+        "personal": {
+            "age": 30,
+        },
+        "location": {
+            "country": "RS",
+            "city": "Belgrade",
+        },
+        "financial": {
+            "income": 1500,
+            "expenses": 700,
+            "monthly_debt": 100,
+            "savings": 5000,
+            "currency": "EUR",
+        },
+        "professional": {
+            "sector": "Technology",
+            "profession": "Software Engineer",
+            "employment_status": "full-time",
+            "interests": ["programming", "investing"],
+            "prior_experience": "",
+            "weekly_hours": "5-15",
+        },
+        "preferences": {
+            "risk_profile": "medium",
+            "horizon": "3-5",
+        },
+    }
+
+
 def test_health_returns_running():
-    response = client.get("/")
+    response = client.get("/health")
 
     assert response.status_code == 200
     assert response.json() == {"status": "running"}
 
 
-def test_analyze_calls_engines_and_returns_result(monkeypatch, valid_user_payload):
+def test_analyze_calls_pipeline_and_returns_result(monkeypatch, valid_user_payload):
     captured = {}
 
-    def fake_calculate_risk_score(user):
-        captured["risk_user"] = user
-        return {
-            "level": "medium_risk",
-            "adjusted_score": 9.5,
-        }
-
-    def fake_calculate_interest_rate(risk, country):
-        captured["interest_risk"] = risk
-        captured["interest_country"] = country
-        return {
-            "interest_rate": 0.05,
-            "country": country,
-        }
-
-    def fake_calculate_loan_offer(user, risk, interest):
-        captured["loan_user"] = user
-        captured["loan_risk"] = risk
-        captured["loan_interest"] = interest
-        return {
-            "approved": True,
-            "max_loan_amount": 10000,
-        }
-
-    monkeypatch.setattr(api_routes, "calculate_risk_score", fake_calculate_risk_score)
-    monkeypatch.setattr(api_routes, "calculate_interest_rate", fake_calculate_interest_rate)
-    monkeypatch.setattr(api_routes, "calculate_loan_offer", fake_calculate_loan_offer)
-
-    response = client.post("/analyze", json=valid_user_payload)
-
-    assert response.status_code == 200
-
-    data = response.json()
-
-    assert data == {
+    expected_result = {
+        "user_summary": {
+            "country": "RS",
+            "city": "Belgrade",
+            "age": 30,
+            "income": 1500,
+            "expenses": 700,
+            "monthly_debt": 100,
+            "savings": 5000,
+            "currency": "EUR",
+            "risk_profile": "medium",
+            "horizon": "3-5",
+        },
         "risk": {
+            "creditworthiness": "medium",
+            "explanation": "Risk explanation",
+            "score": 9.5,
             "level": "medium_risk",
-            "adjusted_score": 9.5,
+            "country": "RS",
+            "country_factor": 1.0,
+            "disposable_income": 700,
+            "debt_ratio": 0.07,
+            "base_score": 9.5,
         },
         "interest": {
             "interest_rate": 0.05,
@@ -65,27 +83,37 @@ def test_analyze_calls_engines_and_returns_result(monkeypatch, valid_user_payloa
         "loan": {
             "approved": True,
             "max_loan_amount": 10000,
+            "monthly_payment": 300,
+            "interest_rate": 0.05,
+            "loan_years": 3,
         },
+        "strategies": [],
+        "recommendation": None,
+        "reasoning": "Mocked reasoning",
+        "next_step": "Mocked next step",
+        "profile_used": "medium",
     }
 
-    assert captured["risk_user"].financial.income == 1500
-    assert captured["interest_country"] == "RS"
-    assert captured["loan_risk"]["level"] == "medium_risk"
-    assert captured["loan_interest"]["interest_rate"] == 0.05
+    async def fake_run_pipeline(user):
+        captured["user"] = user
+        return expected_result
+
+    monkeypatch.setattr(api_routes, "run_pipeline", fake_run_pipeline)
+
+    response = client.post("/analyze", json=valid_user_payload)
+
+    assert response.status_code == 200
+    assert response.json() == expected_result
+
+    assert captured["user"].financial.income == 1500
+    assert captured["user"].location.country.value == "RS"
+    assert captured["user"].location.city == "Belgrade"
+    assert captured["user"].preferences.risk_profile.value == "medium"
 
 
-def test_analyze_invalid_payload_returns_422(valid_user_payload):
+def test_analyze_rejects_expenses_greater_than_income(valid_user_payload):
     payload = deepcopy(valid_user_payload)
     payload["financial"]["expenses"] = 1500
-
-    response = client.post("/analyze", json=payload)
-
-    assert response.status_code == 422
-
-
-def test_analyze_rejects_invalid_city_for_country(valid_user_payload):
-    payload = deepcopy(valid_user_payload)
-    payload["location"] = {"country": "RS", "city": "Berlin"}
 
     response = client.post("/analyze", json=payload)
 
@@ -101,9 +129,30 @@ def test_analyze_rejects_expenses_equal_to_income(valid_user_payload):
     assert response.status_code == 422
 
 
-def test_analyze_rejects_invalid_enum_value(valid_user_payload):
+def test_analyze_rejects_invalid_city_for_country(valid_user_payload):
+    payload = deepcopy(valid_user_payload)
+    payload["location"] = {
+        "country": "RS",
+        "city": "Berlin",
+    }
+
+    response = client.post("/analyze", json=payload)
+
+    assert response.status_code == 422
+
+
+def test_analyze_rejects_invalid_risk_profile(valid_user_payload):
     payload = deepcopy(valid_user_payload)
     payload["preferences"]["risk_profile"] = "extreme"
+
+    response = client.post("/analyze", json=payload)
+
+    assert response.status_code == 422
+
+
+def test_analyze_rejects_too_young_user(valid_user_payload):
+    payload = deepcopy(valid_user_payload)
+    payload["personal"]["age"] = 17
 
     response = client.post("/analyze", json=payload)
 
