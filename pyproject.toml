@@ -3,7 +3,17 @@ name = "ai-loan"
 version = "0.1.0"
 requires-python = ">=3.12"
 dependencies = [
-    "faiss-cpu>=1.13.2",
+    "certifi==2026.4.22",
+    "faiss-cpu==1.13.2",
     "fastapi>=0.136.0",
+    "httpcore==1.0.9",
+    "httpx==0.28.1",
+    "iniconfig==2.3.0",
+    "numpy==2.4.4",
+    "packaging==26.2",
+    "pluggy==1.6.0",
+    "pygments==2.20.0",
+    "pytest==9.0.3",
+    "python-dotenv==1.2.2",
     "uvicorn>=0.44.0",
 ]
