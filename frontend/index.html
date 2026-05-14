@@ -18,8 +18,53 @@
             min-height: 100vh;
         }
 
-        .strategy-card { transition: all 0.2s; }
+        .strategy-card { transition: all 0.2s; position: relative; }
         .strategy-card:hover { transform: translateY(-2px); box-shadow: 0 10px 20px rgba(0,0,0,0.1); }
+
+        /* ⭐ WINNER BADGE */
+        .strategy-card.winner {
+            border-color: #F97316 !important;
+            border-width: 3px !important;
+            box-shadow: 0 0 0 4px rgba(249, 115, 22, 0.2), 0 10px 25px rgba(249, 115, 22, 0.4);
+        }
+        .winner-badge {
+            position: absolute;
+            top: -12px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: linear-gradient(135deg, #FFCC00 0%, #F97316 50%, #B91C1C 100%);
+            color: white;
+            font-weight: 800;
+            font-size: 11px;
+            padding: 4px 14px;
+            border-radius: 9999px;
+            box-shadow: 0 4px 12px rgba(249, 115, 22, 0.5);
+            white-space: nowrap;
+            z-index: 10;
+        }
+
+        /* 📚 RAG CHIP */
+        .rag-chip {
+            display: inline-block;
+            background: linear-gradient(135deg, #ede9fe 0%, #ddd6fe 100%);
+            color: #5b21b6;
+            font-size: 10px;
+            font-weight: 600;
+            padding: 2px 8px;
+            border-radius: 9999px;
+            border: 1px solid #c4b5fd;
+            margin: 2px;
+            font-family: 'SF Mono', Monaco, monospace;
+        }
+
+        /* ⚠️ MARGIN CALL WARNING */
+        .margin-warning {
+            background: linear-gradient(135deg, #fef3c7 0%, #fed7aa 100%);
+            border-left: 4px solid #DC2626;
+            padding: 10px 12px;
+            border-radius: 6px;
+            margin-top: 8px;
+        }
 
         .interest-chip {
             cursor: pointer;
@@ -87,11 +132,27 @@
             0%, 100% { transform: rotate(-5deg); }
             50% { transform: rotate(5deg); }
         }
+
+        /* 📊 LOANS TABLE */
+        .loan-row-active {
+            background: linear-gradient(90deg, #ecfdf5 0%, #f0fdf4 100%);
+        }
+        .loan-row-inactive {
+            background: #f9fafb;
+            opacity: 0.7;
+        }
+
+        /* AGENT EMOJI BG */
+        .agent-bg-business { background: linear-gradient(135deg, #FFCC00 0%, #F97316 100%); }
+        .agent-bg-business_cash { background: linear-gradient(135deg, #FCD34D 0%, #F59E0B 100%); }
+        .agent-bg-real_estate { background: linear-gradient(135deg, #FCA5A5 0%, #B91C1C 100%); }
+        .agent-bg-stock_cash { background: linear-gradient(135deg, #93C5FD 0%, #3B82F6 100%); }
+        .agent-bg-stock_margin { background: linear-gradient(135deg, #FCA5A5 0%, #DC2626 100%); }
     </style>
 </head>
 <body class="ca-bg">
 
-<div class="max-w-6xl mx-auto p-6">
+<div class="max-w-7xl mx-auto p-6">
 
     <!-- ═══════════════ HEADER ═══════════════ -->
     <header class="text-center mb-8 pt-6">
@@ -105,7 +166,7 @@
             AI Financial Advisor That Actually Knows California
         </p>
         <p class="text-sm text-gray-600 mt-2">
-            Real California data · Prop 13 · QSBS · 8 regions · 115+ cities
+            Real California data · Prop 13 · QSBS · 8 regions · 115+ cities · RAG-powered
         </p>
     </header>
 
@@ -172,8 +233,10 @@
                                class="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:ring-2 focus:ring-orange-500">
                     </div>
                     <div>
-                        <label class="block text-sm font-semibold text-gray-700 mb-1">Savings</label>
-                        <input type="number" id="savings" value="60000" min="0"
+                        <label class="block text-sm font-semibold text-gray-700 mb-1">
+                            Savings <span class="text-xs text-gray-400">(up to $10M)</span>
+                        </label>
+                        <input type="number" id="savings" value="60000" min="0" max="10000000" step="1000"
                                class="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:ring-2 focus:ring-orange-500">
                     </div>
                 </div>
@@ -233,37 +296,31 @@
             </div>
         </div>
 
-        <!-- ⭐ CALIFORNIA-SPECIFIC ADVANCED SECTION -->
-        <div class="mt-6">
+        <!-- ⭐ CALIFORNIA-SPECIFIC ADVANCED SECTION (CONDITIONAL) -->
+        <div id="advanced-wrapper" class="mt-6 hidden">
             <div id="advanced-toggle" class="advanced-toggle rounded-xl p-4 text-center">
                 <h3 class="font-bold text-orange-800 flex items-center justify-center gap-2">
                     🌴 California-Specific Details
                     <span class="text-xs bg-orange-600 text-white px-2 py-0.5 rounded-full">CLICK TO EXPAND</span>
                 </h3>
-                <p class="text-xs text-gray-600 mt-1">Tech equity, entertainment industry roles, QSBS eligibility</p>
+                <p id="advanced-hint" class="text-xs text-gray-600 mt-1">
+                    Sector-specific fields tailored to your profile
+                </p>
             </div>
 
             <div id="advanced-section" class="hidden mt-4 bg-gradient-to-br from-orange-50 to-yellow-50 rounded-xl p-6 border-2 border-orange-200">
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
+                    <!-- 🖥️ TECH FIELDS (shown only when sector = Technology) -->
+                    <div id="tech-role-wrapper" class="hidden">
                         <label class="block text-sm font-semibold text-gray-700 mb-1">
-                            🖥️ Tech Role <span class="text-gray-400 text-xs">(if applicable)</span>
+                            🖥️ Tech Role
                         </label>
                         <select id="tech_role" class="w-full px-4 py-2 border-2 border-orange-200 rounded-lg focus:ring-2 focus:ring-orange-500">
                             <option value="">-- Not applicable --</option>
                         </select>
                     </div>
 
-                    <div>
-                        <label class="block text-sm font-semibold text-gray-700 mb-1">
-                            💎 Equity Compensation
-                        </label>
-                        <select id="equity_compensation" class="w-full px-4 py-2 border-2 border-orange-200 rounded-lg focus:ring-2 focus:ring-orange-500">
-                            <option value="">-- None --</option>
-                        </select>
-                    </div>
-
-                    <div>
+                    <div id="company-stage-wrapper" class="hidden">
                         <label class="block text-sm font-semibold text-gray-700 mb-1">
                             🏢 Company Stage
                         </label>
@@ -272,17 +329,29 @@
                         </select>
                     </div>
 
-                    <div>
+                    <!-- 🎬 ENTERTAINMENT FIELDS (shown only when sector = Entertainment & Media) -->
+                    <div id="entertainment-role-wrapper" class="hidden">
                         <label class="block text-sm font-semibold text-gray-700 mb-1">
-                            🎬 Entertainment Role <span class="text-gray-400 text-xs">(LA-specific)</span>
+                            🎬 Entertainment Role
                         </label>
                         <select id="entertainment_role" class="w-full px-4 py-2 border-2 border-orange-200 rounded-lg focus:ring-2 focus:ring-orange-500">
                             <option value="">-- Not applicable --</option>
                         </select>
                     </div>
+
+                    <!-- 💎 EQUITY (shown for both Tech AND Entertainment) -->
+                    <div id="equity-wrapper" class="hidden">
+                        <label class="block text-sm font-semibold text-gray-700 mb-1">
+                            💎 Equity Compensation
+                        </label>
+                        <select id="equity_compensation" class="w-full px-4 py-2 border-2 border-orange-200 rounded-lg focus:ring-2 focus:ring-orange-500">
+                            <option value="">-- None --</option>
+                        </select>
+                    </div>
                 </div>
 
-                <div class="mt-4 bg-yellow-50 border-2 border-yellow-300 rounded-lg p-3">
+                <!-- 💎 QSBS — shown for Tech only -->
+                <div id="qsbs-wrapper" class="hidden mt-4 bg-yellow-50 border-2 border-yellow-300 rounded-lg p-3">
                     <label class="flex items-center gap-2 cursor-pointer">
                         <input type="checkbox" id="qsbs_eligible" class="w-5 h-5 text-orange-600 rounded">
                         <div>
@@ -323,46 +392,42 @@
         <div class="loading-spinner"></div>
         <p class="mt-4 text-gray-700 font-semibold">🌴 California agents analyzing your profile...</p>
         <p class="text-sm text-gray-500 mt-1">Bay Area Tech · LA Entertainment · SD Biotech · Sacramento Govt...</p>
+        <p class="text-xs text-gray-400 mt-2">RAG retrieving California-specific knowledge from 51 chunks...</p>
     </section>
 
     <!-- ═══════════════ RESULTS ═══════════════ -->
     <section id="results-section" class="hidden">
 
-        <!-- 🌟 REALITY CHECK BANNER (Phase 5 placeholder) -->
-        <div id="reality-check-banner" class="hidden mb-6 bg-gradient-to-br from-blue-50 to-cyan-50 rounded-2xl shadow-lg p-6 border-2 border-blue-300">
-            <h3 class="text-lg font-bold text-blue-800 mb-3 flex items-center gap-2">
-                📡 California Reality Check
-                <span class="text-xs bg-blue-200 text-blue-800 px-2 py-0.5 rounded-full">LIVE DATA</span>
-            </h3>
-            <div id="reality-check-content" class="text-sm text-gray-700">
-                <p class="italic">Live market data integration coming in next update.</p>
-            </div>
-        </div>
-
-        <!-- Risk + Loan summary -->
+        <!-- Risk + Loans summary -->
         <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
             <div class="bg-white rounded-2xl shadow-lg p-6 border-t-4 border-orange-500">
                 <h3 class="text-lg font-bold text-gray-800 mb-4">📊 Your Risk Profile</h3>
                 <div id="risk-content"></div>
             </div>
             <div class="bg-white rounded-2xl shadow-lg p-6 border-t-4 border-yellow-500">
-                <h3 class="text-lg font-bold text-gray-800 mb-4">💰 Maximum Loan Offer</h3>
-                <div id="loan-content"></div>
+                <h3 class="text-lg font-bold text-gray-800 mb-4 flex items-center justify-between">
+                    💰 Available Loan Options
+                    <span class="text-xs font-normal text-gray-500">5 types analyzed</span>
+                </h3>
+                <div id="loans-content"></div>
             </div>
         </div>
 
-        <!-- Strategies -->
-        <div class="bg-white rounded-2xl shadow-lg p-6 mb-6 border-t-4 border-red-500">
-            <h3 class="text-lg font-bold text-gray-800 mb-4">🎯 Investment Strategies</h3>
-            <div id="strategies-content" class="grid grid-cols-1 md:grid-cols-3 gap-4"></div>
-        </div>
-
-        <!-- Recommendation -->
+        <!-- Recommendation BANNER (sticky on top) -->
         <div class="ca-gradient rounded-2xl shadow-xl p-6 mb-6 text-white">
             <h3 class="text-lg font-bold mb-4 flex items-center gap-2">
                 ⭐ Our California Recommendation
             </h3>
             <div id="recommendation-content"></div>
+        </div>
+
+        <!-- Strategies — 5 cards in responsive grid -->
+        <div class="bg-white rounded-2xl shadow-lg p-6 mb-6 border-t-4 border-red-500">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-lg font-bold text-gray-800">🎯 Investment Strategies</h3>
+                <span class="text-xs text-gray-500">5 strategies analyzed · sorted by personalized score</span>
+            </div>
+            <div id="strategies-content" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-4 pt-4"></div>
         </div>
 
         <!-- SIMULATOR -->
@@ -444,7 +509,7 @@
             <strong>CaliforniaCFO</strong> — Specialized for California, USA
         </p>
         <p class="text-xs text-gray-500">
-            Multi-agent system · 8 regions · 115+ cities · Prop 13 · QSBS · USD only
+            Multi-agent system · 8 regions · 115+ cities · Prop 13 · QSBS · RAG (51 chunks) · USD only
         </p>
     </footer>
 </div>
@@ -455,6 +520,85 @@ let OPTIONS = null;
 let currentUserData = null;
 let currentAnalyzeResult = null;
 
+// ⭐ AGENT METADATA — centralized config
+const AGENT_META = {
+    'business': {
+        emoji: '💼',
+        label: 'Business (Loan)',
+        loanLabel: 'business loan',
+        bgClass: 'agent-bg-business'
+    },
+    'business_cash': {
+        emoji: '💰',
+        label: 'Business (Cash)',
+        loanLabel: 'no loan — bootstrap',
+        bgClass: 'agent-bg-business_cash'
+    },
+    'real_estate': {
+        emoji: '🏠',
+        label: 'Real Estate',
+        loanLabel: 'mortgage (if direct)',
+        bgClass: 'agent-bg-real_estate'
+    },
+    'stock_cash': {
+        emoji: '📊',
+        label: 'Stocks (Cash)',
+        loanLabel: 'no loan',
+        bgClass: 'agent-bg-stock_cash'
+    },
+    'stock_margin': {
+        emoji: '📈',
+        label: 'Stocks (Margin)',
+        loanLabel: 'margin loan ⚠️',
+        bgClass: 'agent-bg-stock_margin'
+    },
+    'stock': {
+        emoji: '📈',
+        label: 'Stock Portfolio',
+        loanLabel: 'stock',
+        bgClass: 'agent-bg-stock_cash'
+    }
+};
+
+// ⭐ LOAN METADATA
+const LOAN_META = {
+    'business': {
+        emoji: '🏦',
+        label: 'Business Loan',
+        description: 'For business strategy',
+        usedBy: 'Business (loan-funded) strategy',
+        active: true
+    },
+    'mortgage': {
+        emoji: '🏠',
+        label: 'Mortgage (30-yr)',
+        description: 'For direct real estate',
+        usedBy: 'Real Estate (direct property) strategy',
+        active: true
+    },
+    'stock_margin': {
+        emoji: '📈',
+        label: 'Margin Loan',
+        description: 'Callable — broker can force liquidation',
+        usedBy: 'Stock Margin strategy ⚠️',
+        active: true
+    },
+    'personal': {
+        emoji: '📝',
+        label: 'Personal Loan',
+        description: 'General purpose, unsecured',
+        usedBy: 'Available — not used by current strategies',
+        active: false
+    },
+    'sbloc': {
+        emoji: '💎',
+        label: 'SBLOC',
+        description: 'Securities-backed line of credit',
+        usedBy: 'Reserved for future strategies',
+        active: false
+    }
+};
+
 // ═══════════════ INIT ═══════════════
 async function init() {
     try {
@@ -464,6 +608,7 @@ async function init() {
         populateDropdowns();
         renderInterests();
         setupAdvancedToggle();
+        setupSectorWatcher();  // ⭐ NEW: conditional CA-specific fields
         document.getElementById('form-section').classList.remove('hidden');
         document.getElementById('api-status').classList.add('hidden');
     } catch (e) {
@@ -486,13 +631,11 @@ function fillSelectWithEmpty(id, items, formatter = i => i) {
 }
 
 function populateDropdowns() {
-    // California regions (NEW)
     const regionSelect = document.getElementById('region');
     regionSelect.innerHTML = OPTIONS.regions.map(r =>
         `<option value="${r.value}" data-desc="${r.description}">${r.label}</option>`
     ).join('');
 
-    // Standard dropdowns
     fillSelect('sector', OPTIONS.sectors);
     fillSelect('profession', OPTIONS.professions);
     fillSelect('employment_status', OPTIONS.employment_statuses);
@@ -500,13 +643,11 @@ function populateDropdowns() {
     fillSelect('horizon', OPTIONS.horizons);
     fillSelect('weekly_hours', OPTIONS.weekly_hours);
 
-    // California-specific (with empty option)
     fillSelectWithEmpty('tech_role', OPTIONS.tech_roles);
     fillSelectWithEmpty('equity_compensation', OPTIONS.equity_compensations);
     fillSelectWithEmpty('company_stage', OPTIONS.company_stages);
     fillSelectWithEmpty('entertainment_role', OPTIONS.entertainment_roles);
 
-    // Event listeners
     regionSelect.addEventListener('change', updateCities);
     regionSelect.addEventListener('change', updateRegionDescription);
 
@@ -530,11 +671,75 @@ function updateRegionDescription() {
     }
 }
 
+// ═══════════════ ⭐ CONDITIONAL CA-SPECIFIC FIELDS ═══════════════
+function setupSectorWatcher() {
+    const sectorSelect = document.getElementById('sector');
+    sectorSelect.addEventListener('change', updateCaSpecificVisibility);
+
+    // Run on initial load
+    updateCaSpecificVisibility();
+}
+
+function updateCaSpecificVisibility() {
+    const sector = document.getElementById('sector').value;
+    const isTech = sector === 'Technology';
+    const isEntertainment = sector === 'Entertainment & Media';
+    const hasCASpecific = isTech || isEntertainment;
+
+    // Show/hide whole wrapper
+    const wrapper = document.getElementById('advanced-wrapper');
+    if (hasCASpecific) {
+        wrapper.classList.remove('hidden');
+    } else {
+        wrapper.classList.add('hidden');
+        document.getElementById('advanced-section').classList.add('hidden');
+        clearCASpecificFields();
+        return;
+    }
+
+    // Update hint
+    const hint = document.getElementById('advanced-hint');
+    if (isTech) {
+        hint.textContent = 'Tech equity, company stage, QSBS eligibility (Section 1202)';
+    } else if (isEntertainment) {
+        hint.textContent = 'LA entertainment industry role & equity compensation';
+    }
+
+    // Tech fields
+    document.getElementById('tech-role-wrapper').classList.toggle('hidden', !isTech);
+    document.getElementById('company-stage-wrapper').classList.toggle('hidden', !isTech);
+    document.getElementById('qsbs-wrapper').classList.toggle('hidden', !isTech);
+
+    // Entertainment fields
+    document.getElementById('entertainment-role-wrapper').classList.toggle('hidden', !isEntertainment);
+
+    // Equity — shown for both Tech AND Entertainment
+    document.getElementById('equity-wrapper').classList.toggle('hidden', !hasCASpecific);
+
+    // Clear fields that became hidden
+    if (!isTech) {
+        document.getElementById('tech_role').value = '';
+        document.getElementById('company_stage').value = '';
+        document.getElementById('qsbs_eligible').checked = false;
+    }
+    if (!isEntertainment) {
+        document.getElementById('entertainment_role').value = '';
+    }
+}
+
+function clearCASpecificFields() {
+    ['tech_role', 'company_stage', 'entertainment_role', 'equity_compensation'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.value = '';
+    });
+    const qsbs = document.getElementById('qsbs_eligible');
+    if (qsbs) qsbs.checked = false;
+}
+
 // ═══════════════ ADVANCED TOGGLE ═══════════════
 function setupAdvancedToggle() {
     document.getElementById('advanced-toggle').addEventListener('click', () => {
-        const section = document.getElementById('advanced-section');
-        section.classList.toggle('hidden');
+        document.getElementById('advanced-section').classList.toggle('hidden');
     });
 }
 
@@ -588,7 +793,6 @@ function buildUserPayload() {
         weekly_hours: document.getElementById('weekly_hours').value
     };
 
-    // Only include California-specific fields if user filled them
     if (techRole) professional.tech_role = techRole;
     if (equity) professional.equity_compensation = equity;
     if (companyStage) professional.company_stage = companyStage;
@@ -651,6 +855,19 @@ function renderResults(data) {
     document.getElementById('results-section').classList.remove('hidden');
 
     // Risk
+    renderRiskProfile(data);
+
+    // Loans table — ALL 5 with usage indication
+    renderLoansTable(data);
+
+    // Recommendation banner (sticky top)
+    renderRecommendation(data);
+
+    // Strategies — sorted by personalized_score DESC, winner highlighted
+    renderStrategies(data);
+}
+
+function renderRiskProfile(data) {
     document.getElementById('risk-content').innerHTML = `
         <div class="space-y-2 text-sm">
             <div class="bg-orange-50 rounded-lg p-3 mb-3 border border-orange-200">
@@ -686,106 +903,297 @@ function renderResults(data) {
             ` : ''}
             <p class="text-xs text-gray-500 mt-3 italic border-t pt-2">${data.risk.explanation}</p>
         </div>`;
+}
 
-    // Loan
-    if (data.loan.approved) {
-        document.getElementById('loan-content').innerHTML = `
-            <div class="space-y-2 text-sm">
-                <div class="flex justify-between"><span class="text-gray-600">Max amount:</span>
-                    <span class="font-bold text-2xl text-green-600">${formatMoney(data.loan.max_loan_amount, 'USD')}</span></div>
-                <div class="flex justify-between"><span>Monthly payment:</span><span class="font-bold">${formatMoney(data.loan.monthly_payment, 'USD')}</span></div>
-                <div class="flex justify-between"><span>Duration:</span><span class="font-bold">${data.loan.loan_years} years</span></div>
-                <div class="flex justify-between"><span>Interest rate:</span><span class="font-bold">${(data.loan.interest_rate*100).toFixed(2)}%</span></div>
-            </div>`;
-    } else {
-        document.getElementById('loan-content').innerHTML = `
-            <div class="text-red-600 font-bold">❌ Loan not approved</div>
-            <div class="text-sm text-gray-600 mt-2">${data.loan.reason || ''}</div>`;
+// ═══════════════ ⭐ NEW: LOANS TABLE (5 types) ═══════════════
+function renderLoansTable(data) {
+    if (!data.loans) {
+        document.getElementById('loans-content').innerHTML = `
+            <p class="text-sm text-gray-500 italic">No loan data available</p>`;
+        return;
     }
 
-    // Strategies
+    // Display order: active first (business, mortgage, margin), then inactive (personal, sbloc)
+    const displayOrder = ['business', 'real_estate', 'stock_margin', 'personal', 'sbloc'];
+    const loanKeyMap = {
+        'business': 'business',
+        'real_estate': 'mortgage',
+        'stock_margin': 'stock_margin',
+        'personal': 'personal',
+        'sbloc': 'sbloc'
+    };
+
+    const rows = displayOrder.map(displayKey => {
+        const meta = LOAN_META[loanKeyMap[displayKey]];
+        if (!meta) return '';
+
+        const loanData = data.loans[displayKey];
+        const rateData = data.all_rates ? data.all_rates[loanKeyMap[displayKey]] : null;
+
+        // Some loans may not be in data.loans (sbloc) — fall back to rate-only display
+        let amount, rate, years, monthly;
+
+        if (loanData && loanData.approved) {
+            amount = loanData.max_loan_amount;
+            rate = loanData.interest_rate;
+            years = loanData.loan_years;
+            monthly = loanData.monthly_payment;
+        } else if (rateData) {
+            amount = null;  // not computed
+            rate = rateData.interest_rate;
+            years = rateData.default_years;
+            monthly = null;
+        } else {
+            return '';
+        }
+
+        const rowClass = meta.active ? 'loan-row-active' : 'loan-row-inactive';
+        const statusIcon = meta.active ? '✅' : '🔵';
+        const statusText = meta.active ? 'Used' : 'Available';
+
+        return `
+            <div class="${rowClass} rounded-lg p-3 mb-2 border border-gray-200">
+                <div class="flex items-center justify-between gap-2">
+                    <div class="flex items-center gap-2">
+                        <span class="text-xl">${meta.emoji}</span>
+                        <div>
+                            <div class="font-bold text-sm text-gray-800">${meta.label}</div>
+                            <div class="text-xs text-gray-500">${meta.usedBy}</div>
+                        </div>
+                    </div>
+                    <span class="text-xs px-2 py-0.5 rounded-full ${meta.active ? 'bg-green-200 text-green-800' : 'bg-gray-200 text-gray-600'}">
+                        ${statusIcon} ${statusText}
+                    </span>
+                </div>
+                <div class="grid grid-cols-4 gap-2 mt-2 text-xs">
+                    <div>
+                        <div class="text-gray-500">Max</div>
+                        <div class="font-bold">${amount !== null ? formatMoney(amount) : 'N/A'}</div>
+                    </div>
+                    <div>
+                        <div class="text-gray-500">Rate</div>
+                        <div class="font-bold">${(rate * 100).toFixed(2)}%</div>
+                    </div>
+                    <div>
+                        <div class="text-gray-500">Term</div>
+                        <div class="font-bold">${years} yr</div>
+                    </div>
+                    <div>
+                        <div class="text-gray-500">Monthly</div>
+                        <div class="font-bold">${monthly !== null ? formatMoney(monthly) : 'N/A'}</div>
+                    </div>
+                </div>
+            </div>
+        `;
+    }).join('');
+
+    document.getElementById('loans-content').innerHTML = `
+        <div class="space-y-2">
+            ${rows}
+        </div>
+        <p class="text-xs text-gray-500 mt-3 italic">
+            📋 Active loans (✅) are used by strategies. Available loans (🔵) are computed but not yet leveraged.
+        </p>
+    `;
+}
+
+// ═══════════════ RECOMMENDATION BANNER ═══════════════
+function renderRecommendation(data) {
+    if (!data.recommendation) {
+        document.getElementById('recommendation-content').innerHTML = `<p>${data.reasoning || ''}</p>`;
+        return;
+    }
+
+    const winnerAgent = data.recommendation.agent;
+    const meta = AGENT_META[winnerAgent] || { emoji: '🎯', label: winnerAgent };
+    const netReturn = data.recommendation.net_return || 0;
+    const netDollars = data.recommendation.net_return_dollars || 0;
+    const netColor = netReturn >= 0 ? 'text-green-100' : 'text-red-200';
+
+    document.getElementById('recommendation-content').innerHTML = `
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+            <div class="md:col-span-2">
+                <div class="text-xs uppercase tracking-wide opacity-75 mb-1">${meta.label}</div>
+                <h4 class="text-2xl font-extrabold mb-1">${meta.emoji} ${data.recommendation.title}</h4>
+                <p class="text-sm opacity-95">${data.reasoning}</p>
+            </div>
+            <div class="bg-white/20 backdrop-blur rounded-lg p-4 text-center self-start">
+                <div class="text-xs uppercase opacity-75 mb-1">Annual Net Return</div>
+                <div class="text-3xl font-extrabold ${netColor}">${(netReturn * 100).toFixed(2)}%</div>
+                <div class="text-sm opacity-90">${formatMoney(netDollars)}/year</div>
+            </div>
+        </div>
+        <div class="bg-white text-gray-800 rounded-lg p-4 border-2 border-white">
+            <p class="font-bold text-sm">📌 Your next step:</p>
+            <p class="text-sm mt-1">${data.next_step}</p>
+        </div>
+    `;
+}
+
+// ═══════════════ ⭐ STRATEGIES — sorted, with winner ═══════════════
+function renderStrategies(data) {
+    if (!data.strategies || data.strategies.length === 0) {
+        document.getElementById('strategies-content').innerHTML = `
+            <p class="text-sm text-gray-500 italic">No strategies generated</p>`;
+        return;
+    }
+
+    // Sort by personalized_score DESC (winner first); strategies without personalized_score go last
+    const sorted = [...data.strategies].sort((a, b) => {
+        const scoreA = a.personalized_score !== undefined ? a.personalized_score : -1;
+        const scoreB = b.personalized_score !== undefined ? b.personalized_score : -1;
+        return scoreB - scoreA;
+    });
+
+    const winnerAgent = data.recommendation ? data.recommendation.agent : null;
+
     document.getElementById('strategies-content').innerHTML =
-        data.strategies.map(s => renderStrategyCard(s, 'USD')).join('');
-
-    // Recommendation
-    if (data.recommendation) {
-        document.getElementById('recommendation-content').innerHTML = `
-            <h4 class="text-xl font-bold mb-2">${data.recommendation.title}</h4>
-            <p class="mb-4 leading-relaxed">${data.reasoning}</p>
-            <div class="bg-white text-gray-800 rounded-lg p-4 border-2 border-white">
-                <p class="font-bold text-sm">📌 Your next step:</p>
-                <p class="text-sm mt-1">${data.next_step}</p>
-            </div>`;
-    } else {
-        document.getElementById('recommendation-content').innerHTML = `
-            <p>${data.reasoning}</p>`;
-    }
+        sorted.map((s, idx) => renderStrategyCard(s, 'USD', s.agent === winnerAgent)).join('');
 }
 
 // ═══════════════ STRATEGY CARD ═══════════════
-function renderStrategyCard(s, currency) {
+function renderStrategyCard(s, currency, isWinner = false) {
+    const meta = AGENT_META[s.agent] || { emoji: '📊', label: s.agent, bgClass: '' };
+
     const statusColor = {
         'profitable': 'bg-green-100 text-green-800 border-green-300',
+        'marginal': 'bg-yellow-100 text-yellow-800 border-yellow-300',
         'not_profitable': 'bg-red-100 text-red-800 border-red-300',
         'no_loan': 'bg-gray-100 text-gray-800 border-gray-300'
     }[s.status] || 'bg-gray-100';
 
-    const agentEmoji = { 'business': '💼', 'real_estate': '🏠', 'stock': '📈' }[s.agent] || '📊';
-    const agentLabel = { 'business': 'Business', 'real_estate': 'Real Estate', 'stock': 'Stock Portfolio' }[s.agent] || s.agent;
+    const statusLabel = {
+        'profitable': '✅ Profitable',
+        'marginal': '⚠️ Marginal',
+        'not_profitable': '❌ Not profitable',
+        'no_loan': '— No loan'
+    }[s.status] || s.status;
 
     const typeBadge = s.type
-        ? `<span class="text-xs px-2 py-0.5 bg-orange-100 text-orange-700 rounded">${s.type}</span>`
+        ? `<span class="text-xs px-2 py-0.5 bg-orange-100 text-orange-700 rounded font-medium">${s.type}</span>`
         : '';
 
     const allocationHTML = renderAllocation(s.allocation, currency);
     const cardId = `card-${s.agent}-${Math.random().toString(36).substr(2, 9)}`;
 
+    // Net return color
+    const netReturnColor = s.net_return >= 0 ? 'text-green-600' : 'text-red-600';
+    const netReturnArrow = s.net_return >= 0 ? '↑' : '↓';
+
+    // 📚 RAG SOURCES section
+    const ragHTML = (s.rag_sources && s.rag_sources.length > 0)
+        ? `
+        <div class="px-4 py-2 bg-purple-50 border-t border-purple-100">
+            <div class="text-xs text-purple-700 font-semibold mb-1">📚 Knowledge sources (RAG):</div>
+            <div class="flex flex-wrap">
+                ${s.rag_sources.map(src => `<span class="rag-chip">${src}</span>`).join('')}
+            </div>
+        </div>
+        `
+        : '';
+
+    // ⚠️ MARGIN CALL RISK — only for stock_margin
+    const marginWarningHTML = (s.agent === 'stock_margin' && s.margin_call_risk)
+        ? `
+        <div class="margin-warning mx-4 mb-3">
+            <div class="flex items-start gap-2">
+                <span class="text-lg">⚠️</span>
+                <div class="flex-1 text-xs">
+                    <div class="font-bold text-red-900 mb-1">Margin Call Risk</div>
+                    <div class="grid grid-cols-3 gap-2">
+                        <div>
+                            <div class="text-gray-600">Probability</div>
+                            <div class="font-bold text-red-700">${(s.margin_call_risk.margin_call_probability * 100).toFixed(0)}%</div>
+                        </div>
+                        <div>
+                            <div class="text-gray-600">Severity</div>
+                            <div class="font-bold text-red-700">${(s.margin_call_risk.expected_severity_loss * 100).toFixed(0)}%</div>
+                        </div>
+                        <div>
+                            <div class="text-gray-600">Penalty</div>
+                            <div class="font-bold text-red-700">-${(s.margin_call_risk.risk_adjusted_penalty * 100).toFixed(1)}%</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        `
+        : '';
+
+    // 🏦 LOAN INFO section
+    const usesLoan = s.uses_loan && s.loan_info && s.loan_info.amount > 0;
+    const loanInfoHTML = usesLoan
+        ? `
+        <div class="px-4 py-2 bg-amber-50 border-t border-amber-200 text-xs">
+            <div class="font-semibold text-amber-900 mb-1">🏦 Loan: ${s.loan_info.type}</div>
+            <div class="grid grid-cols-2 gap-2 text-gray-700">
+                <div>${formatMoney(s.loan_info.amount)} @ ${(s.loan_info.rate * 100).toFixed(2)}%</div>
+                <div>${s.loan_info.years} yr · ${formatMoney(s.loan_info.monthly_payment)}/mo</div>
+            </div>
+        </div>
+        `
+        : `
+        <div class="px-4 py-2 bg-blue-50 border-t border-blue-100 text-xs">
+            <span class="font-semibold text-blue-800">💵 No loan</span>
+            <span class="text-gray-600 ml-1">— ${meta.loanLabel}</span>
+        </div>
+        `;
+
     return `
-        <div class="strategy-card border-2 border-gray-200 rounded-xl bg-white overflow-hidden">
-            <div class="p-4 border-b">
+        <div class="strategy-card border-2 border-gray-200 rounded-xl bg-white overflow-hidden ${isWinner ? 'winner' : ''}">
+            ${isWinner ? '<div class="winner-badge">🏆 RECOMMENDED</div>' : ''}
+
+            <div class="p-4 border-b ${isWinner ? 'pt-6' : ''}">
                 <div class="flex justify-between items-start mb-2 gap-2">
                     <div class="flex-1">
                         <div class="flex items-center gap-2 mb-1">
-                            <span class="text-xs text-gray-500 uppercase font-semibold">${agentLabel}</span>
+                            <span class="text-xs text-gray-500 uppercase font-semibold tracking-wide">${meta.label}</span>
                             ${typeBadge}
                         </div>
                         <h4 class="font-bold text-gray-800 text-base leading-tight">
-                            ${agentEmoji} ${s.title || s.agent}
+                            ${meta.emoji} ${s.title || s.agent}
                         </h4>
                     </div>
                     <span class="text-xs px-2 py-1 rounded border ${statusColor} whitespace-nowrap font-medium">
-                        ${s.status}
+                        ${statusLabel}
                     </span>
                 </div>
-                <p class="text-sm text-gray-600 mt-2">${s.description || ''}</p>
+                <p class="text-xs text-gray-600 mt-2 line-clamp-3">${s.description || ''}</p>
             </div>
 
-            <div class="p-4 bg-orange-50 grid grid-cols-2 gap-3 text-sm">
-                <div>
-                    <div class="text-xs text-gray-500">📊 Real return</div>
-                    <div class="font-bold text-base">${(s.real_return*100).toFixed(2)}%</div>
+            <!-- 💰 NET RETURN — HERO METRIC -->
+            <div class="px-4 py-3 bg-gradient-to-r from-orange-50 to-amber-50 border-b">
+                <div class="text-xs text-gray-500 uppercase tracking-wide">Annual Net Return</div>
+                <div class="flex items-baseline gap-2">
+                    <span class="text-2xl font-extrabold ${netReturnColor}">
+                        ${netReturnArrow} ${(s.net_return * 100).toFixed(2)}%
+                    </span>
+                    <span class="text-sm ${netReturnColor} font-semibold">
+                        ${formatMoney(s.net_return_dollars || 0)}/yr
+                    </span>
                 </div>
-                <div>
-                    <div class="text-xs text-gray-500">💰 Net return</div>
-                    <div class="font-bold text-base ${s.net_return >= 0 ? 'text-green-600' : 'text-red-600'}">
-                        ${(s.net_return*100).toFixed(2)}%
-                    </div>
-                </div>
+            </div>
+
+            <div class="p-4 grid grid-cols-2 gap-3 text-sm">
                 <div>
                     <div class="text-xs text-gray-500">⚡ Risk</div>
-                    <div class="font-bold">${(s.risk*100).toFixed(0)}%</div>
+                    <div class="font-bold">${(s.risk * 100).toFixed(0)}%</div>
                     <div class="w-full bg-gray-200 rounded-full h-1.5 mt-1">
-                        <div class="bg-orange-500 h-1.5 rounded-full" style="width: ${s.risk*100}%"></div>
+                        <div class="bg-orange-500 h-1.5 rounded-full" style="width: ${s.risk * 100}%"></div>
                     </div>
                 </div>
                 <div>
                     <div class="text-xs text-gray-500">🛡️ Stability</div>
-                    <div class="font-bold">${(s.stability*100).toFixed(0)}%</div>
+                    <div class="font-bold">${(s.stability * 100).toFixed(0)}%</div>
                     <div class="w-full bg-gray-200 rounded-full h-1.5 mt-1">
-                        <div class="bg-yellow-500 h-1.5 rounded-full" style="width: ${s.stability*100}%"></div>
+                        <div class="bg-yellow-500 h-1.5 rounded-full" style="width: ${s.stability * 100}%"></div>
                     </div>
                 </div>
             </div>
+
+            ${loanInfoHTML}
+
+            ${marginWarningHTML}
 
             ${s.time_to_profit ? `
                 <div class="px-4 py-2 bg-yellow-50 border-t text-xs">
@@ -793,6 +1201,8 @@ function renderStrategyCard(s, currency) {
                     <span class="font-semibold">${s.time_to_profit}</span>
                 </div>
             ` : ''}
+
+            ${ragHTML}
 
             <button onclick="document.getElementById('${cardId}').classList.toggle('hidden')"
                     class="w-full px-4 py-2 text-sm text-orange-600 hover:bg-orange-50 border-t font-medium transition">
@@ -832,15 +1242,9 @@ function renderStrategyCard(s, currency) {
                     </div>
                 ` : ''}
 
-                ${s.warning ? `
-                    <div class="bg-yellow-100 border-l-4 border-yellow-500 p-3 text-xs text-yellow-800">
-                        ⚠️ ${s.warning}
-                    </div>
-                ` : ''}
-
                 <div class="pt-2 border-t flex justify-between text-xs text-gray-500">
                     <span>Score: <strong>${(s.score || 0).toFixed(4)}</strong></span>
-                    ${s.personalized_score ? `<span>Personalized: <strong>${s.personalized_score.toFixed(4)}</strong></span>` : ''}
+                    ${s.personalized_score !== undefined ? `<span>Personalized: <strong>${s.personalized_score.toFixed(4)}</strong></span>` : ''}
                 </div>
             </div>
         </div>`;
@@ -869,7 +1273,7 @@ function renderAllocation(allocation, currency) {
                     percentage = parseFloat(val);
                 } else {
                     const numVal = typeof val === 'number' ? val : 0;
-                    displayValue = formatMoney(numVal, currency);
+                    displayValue = formatMoney(numVal);
                     percentage = total > 0 ? (numVal / total * 100) : 0;
                 }
 
@@ -902,27 +1306,27 @@ function renderAllocation(allocation, currency) {
             ${!isPercentage ? `
                 <div class="pt-2 border-t mt-2 flex justify-between text-xs">
                     <span class="font-semibold text-gray-700">Total:</span>
-                    <span class="font-bold">${formatMoney(total, currency)}</span>
+                    <span class="font-bold">${formatMoney(total)}</span>
                 </div>
             ` : ''}
         </div>
     `;
 }
 
-function formatMoney(amount, currency = 'USD') {
+function formatMoney(amount) {
     return `$${(amount || 0).toLocaleString('en-US', { maximumFractionDigits: 2 })}`;
 }
 
 // ═══════════════ SIMULATOR ═══════════════
 function configureSimulator(data) {
-    const maxLoan = data.loan.approved ? data.loan.max_loan_amount : 0;
-    const maxYears = data.loan.approved ? data.loan.loan_years : 7;
+    const maxLoan = data.loan && data.loan.approved ? data.loan.max_loan_amount : 0;
+    const maxYears = data.loan && data.loan.approved ? data.loan.loan_years : 7;
     const maxSavings = data.user_summary.savings;
 
     const loanSlider = document.getElementById('sim-loan-amount');
     loanSlider.max = maxLoan;
     loanSlider.value = Math.min(maxLoan / 2, maxLoan);
-    document.getElementById('loan-max-label').textContent = formatMoney(maxLoan, 'USD');
+    document.getElementById('loan-max-label').textContent = formatMoney(maxLoan);
 
     const yearsSlider = document.getElementById('sim-loan-years');
     yearsSlider.max = maxYears;
@@ -931,7 +1335,7 @@ function configureSimulator(data) {
     const savingsSlider = document.getElementById('sim-savings');
     savingsSlider.max = maxSavings;
     savingsSlider.value = Math.min(maxSavings * 0.6, maxSavings);
-    document.getElementById('savings-max-label').textContent = formatMoney(maxSavings, 'USD');
+    document.getElementById('savings-max-label').textContent = formatMoney(maxSavings);
 
     [loanSlider, yearsSlider, savingsSlider].forEach(s => s.addEventListener('input', updateSliderDisplay));
     updateSliderDisplay();
@@ -941,11 +1345,11 @@ function updateSliderDisplay() {
     const loan = parseFloat(document.getElementById('sim-loan-amount').value);
     const years = parseInt(document.getElementById('sim-loan-years').value);
     const savings = parseFloat(document.getElementById('sim-savings').value);
-    const rate = currentAnalyzeResult.loan.interest_rate || 0;
+    const rate = currentAnalyzeResult.loan ? (currentAnalyzeResult.loan.interest_rate || 0) : 0;
 
-    document.getElementById('loan-amount-value').textContent = formatMoney(loan, 'USD');
+    document.getElementById('loan-amount-value').textContent = formatMoney(loan);
     document.getElementById('loan-years-value').textContent = `${years} years`;
-    document.getElementById('savings-value').textContent = formatMoney(savings, 'USD');
+    document.getElementById('savings-value').textContent = formatMoney(savings);
 
     let monthly = 0;
     if (loan > 0 && rate > 0) {
@@ -953,8 +1357,8 @@ function updateSliderDisplay() {
         const monthlyRate = rate / 12;
         monthly = loan * monthlyRate * Math.pow(1 + monthlyRate, months) / (Math.pow(1 + monthlyRate, months) - 1);
     }
-    document.getElementById('preview-monthly').textContent = formatMoney(monthly, 'USD');
-    document.getElementById('preview-total').textContent = formatMoney(loan + savings, 'USD');
+    document.getElementById('preview-monthly').textContent = formatMoney(monthly);
+    document.getElementById('preview-total').textContent = formatMoney(loan + savings);
 }
 
 // ═══════════════ SIMULATE ═══════════════
@@ -994,22 +1398,23 @@ document.getElementById('simulate-btn').addEventListener('click', async () => {
 
 function renderSimulation(data) {
     const sim = data.simulation;
+    const winnerAgent = data.recommendation ? data.recommendation.agent : null;
 
     document.getElementById('simulation-results').classList.remove('hidden');
     document.getElementById('simulation-content').innerHTML = `
         <div class="bg-purple-50 rounded-lg p-4 mb-4 border border-purple-200">
             <h4 class="font-bold mb-2">📊 Your parameters</h4>
             <div class="grid grid-cols-2 gap-2 text-sm">
-                <div>Loan: <strong>${formatMoney(sim.user_chose.loan_amount, 'USD')}</strong></div>
+                <div>Loan: <strong>${formatMoney(sim.user_chose.loan_amount)}</strong></div>
                 <div>Period: <strong>${sim.user_chose.loan_years} yrs</strong></div>
-                <div>Investment from savings: <strong>${formatMoney(sim.user_chose.savings_to_invest, 'USD')}</strong></div>
-                <div>Buffer: <strong>${formatMoney(sim.calculated.savings_kept_as_buffer, 'USD')}</strong></div>
-                <div>Monthly payment: <strong>${formatMoney(sim.calculated.monthly_payment, 'USD')}</strong></div>
-                <div>Total invested: <strong class="text-green-600">${formatMoney(sim.calculated.total_capital_invested, 'USD')}</strong></div>
+                <div>Investment from savings: <strong>${formatMoney(sim.user_chose.savings_to_invest)}</strong></div>
+                <div>Buffer: <strong>${formatMoney(sim.calculated.savings_kept_as_buffer)}</strong></div>
+                <div>Monthly payment: <strong>${formatMoney(sim.calculated.monthly_payment)}</strong></div>
+                <div>Total invested: <strong class="text-green-600">${formatMoney(sim.calculated.total_capital_invested)}</strong></div>
             </div>
         </div>
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
-            ${data.strategies.map(s => renderStrategyCard(s, 'USD')).join('')}
+        <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-4 mb-4 pt-4">
+            ${data.strategies.map(s => renderStrategyCard(s, 'USD', s.agent === winnerAgent)).join('')}
         </div>
         ${data.recommendation ? `
             <div class="ca-gradient rounded-lg p-4 text-white">

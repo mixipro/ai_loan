@@ -3,6 +3,51 @@
 from app.services.llm_service import call_llm_text as call_llm
 from app.agents._common import parse_llm_json, clamp, safe_list, safe_str, safe_dict, call_llm_with_retry
 from app.core.california_config import REGION_DATA
+from app.rag.retriever import retrieve  # ⭐ RAG retriever
+
+
+# ─────────────────────────────────
+# 📚 RAG CONTEXT BUILDER
+# ─────────────────────────────────
+def _build_rag_context(user, business_loan: dict) -> tuple[str, list]:
+    """
+    Retrieves California-specific business knowledge based on user profile.
+
+    Returns:
+        (formatted_context_text, list_of_chunk_ids)
+    """
+    region = user.location.region.value
+    profession = user.professional.profession.value
+    sector = user.professional.sector.value
+    interests = ", ".join(user.professional.interests) if user.professional.interests else ""
+
+    # Build semantic query combining region + profession + interests
+    primary_query = f"California {region} {sector} {profession} business {interests}"
+    secondary_query = f"California {sector} business tax LLC franchise"
+
+    # Retrieve from business + tax categories
+    business_chunks = retrieve(primary_query, top_k=2, category_filter="business")
+    tax_chunks = retrieve(secondary_query, top_k=1, category_filter="tax")
+
+    all_chunks = business_chunks + tax_chunks
+
+    if not all_chunks:
+        return "", []
+
+    # Build LLM-ready context
+    context_parts = ["📚 RELEVANT CALIFORNIA BUSINESS KNOWLEDGE BASE:\n"]
+    for i, chunk in enumerate(all_chunks, 1):
+        context_parts.append(
+            f"\n═══ Knowledge {i}: {chunk['id']} "
+            f"(relevance: {chunk['similarity_score'] * 100:.0f}%) ═══\n"
+            f"Category: {chunk['category']} | Sources: {chunk.get('sources', 'N/A')}\n\n"
+            f"{chunk['content'][:800]}\n"  # Truncate long chunks
+        )
+
+    context_text = "\n".join(context_parts)
+    chunk_ids = [c['id'] for c in all_chunks]
+
+    return context_text, chunk_ids
 
 # ─────────────────────────────────
 # 📊 WEEKLY HOURS CONFIGURATION
@@ -56,9 +101,9 @@ def _calculate_max_return(user) -> float:
 # ─────────────────────────────────
 # 🎯 BUILD PROMPT (with loan)
 # ─────────────────────────────────
-def build_prompt(user, business_loan: dict) -> str:
+def build_prompt(user, business_loan: dict, rag_context: str = "") -> str:
     """
-    Builds prompt for business agent (with business loan).
+    Builds prompt for business agent (with business loan + RAG context).
     """
     total_capital = user.financial.savings
     if business_loan.get("approved"):
@@ -143,6 +188,8 @@ PREFERENCES:
 - Risk tolerance: {user.preferences.risk_profile.value}
 - Investment horizon: {user.preferences.horizon.value} years
 - Primary goal: PROFIT (maximize income, build sustainable revenue)
+
+{rag_context}
 
 🌴 CALIFORNIA BUSINESS CONTEXT:
 - LLC franchise tax: $800/year minimum (mandatory, even for $0 revenue)
@@ -237,10 +284,9 @@ FORMAT:
 # 🎯 BUILD PROMPT — CASH ONLY (no loan)
 # ⭐ NEW: For business_cash strategy
 # ─────────────────────────────────
-def build_prompt_cash(user) -> str:
+def build_prompt_cash(user, rag_context: str = "") -> str:
     """
     Builds prompt for business agent with NO LOAN (cash-only strategy).
-    Uses only savings as capital.
     """
     total_capital = user.financial.savings  # cash only
 
@@ -345,26 +391,46 @@ STRICT RULES:
 # ─────────────────────────────────
 # 🤖 LLM CALL (with loan)
 # ─────────────────────────────────
-async def generate_business_idea_llm(user, business_loan: dict) -> dict:
-    """Generates business idea using LLM with business loan context."""
-    prompt = build_prompt(user, business_loan)
-    return await call_llm_with_retry(
+async def generate_business_idea_llm(user, business_loan: dict) -> tuple[dict, list]:
+    """
+    Generates business idea using LLM with RAG context + retry logic.
+    Returns: (llm_response, rag_chunk_ids)
+    """
+    # ⭐ Step 1: Retrieve California knowledge
+    rag_context, rag_chunk_ids = _build_rag_context(user, business_loan)
+
+    # Step 2: Build prompt with RAG context injected
+    prompt = build_prompt(user, business_loan, rag_context=rag_context)
+
+    # Step 3: LLM call
+    response = await call_llm_with_retry(
         llm_call=lambda: call_llm(prompt),
         agent_name="business"
     )
 
+    return response, rag_chunk_ids
 
 # ─────────────────────────────────
 # 🤖 LLM CALL (cash only)
 # ⭐ NEW
 # ─────────────────────────────────
-async def generate_business_cash_idea_llm(user) -> dict:
-    """Generates business idea using LLM with NO loan (cash-only)."""
-    prompt = build_prompt_cash(user)
-    return await call_llm_with_retry(
+async def generate_business_cash_idea_llm(user) -> tuple[dict, list]:
+    """
+    Generates business idea using LLM with NO loan (cash-only) + RAG.
+    Returns: (llm_response, rag_chunk_ids)
+    """
+    # ⭐ RAG: use empty business_loan dict since we don't need loan info
+    no_loan = {"approved": False, "max_loan_amount": 0, "interest_rate": 0}
+    rag_context, rag_chunk_ids = _build_rag_context(user, no_loan)
+
+    prompt = build_prompt_cash(user, rag_context=rag_context)
+
+    response = await call_llm_with_retry(
         llm_call=lambda: call_llm(prompt),
         agent_name="business_cash"
     )
+
+    return response, rag_chunk_ids
 
 
 # ─────────────────────────────────
@@ -448,10 +514,11 @@ def validate_business_cash_output(data: dict, user=None) -> dict:
 # 🚀 MAIN AGENT FUNCTION (with loan)
 # ─────────────────────────────────
 async def run_business_agent(user, business_loan: dict) -> dict:
-    """Business agent with business loan."""
-    raw = await generate_business_idea_llm(user, business_loan)
-    return validate_business_output(raw, user=user)
-
+    """Business agent with business loan + RAG context."""
+    raw, rag_chunk_ids = await generate_business_idea_llm(user, business_loan)
+    result = validate_business_output(raw, user=user)
+    result["rag_sources"] = rag_chunk_ids  # ⭐ Transparency: which chunks were used
+    return result
 
 # ─────────────────────────────────
 # 🚀 MAIN AGENT FUNCTION — CASH ONLY
@@ -459,8 +526,11 @@ async def run_business_agent(user, business_loan: dict) -> dict:
 # ─────────────────────────────────
 async def run_business_agent_cash(user) -> dict:
     """
-    Business agent funded by savings only — NO loan.
+    Business agent funded by savings only — NO loan + RAG context.
     ⭐ Provides bootstrap alternative for users with sufficient savings.
     """
-    raw = await generate_business_cash_idea_llm(user)
-    return validate_business_cash_output(raw, user=user)
+    # ⭐ BUG FIX: generate_business_cash_idea_llm returns tuple (response, chunk_ids)
+    raw, rag_chunk_ids = await generate_business_cash_idea_llm(user)
+    result = validate_business_cash_output(raw, user=user)
+    result["rag_sources"] = rag_chunk_ids  # ⭐ Transparency
+    return result
