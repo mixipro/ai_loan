@@ -1,55 +1,83 @@
 # app/engines/interest_engine.py
 
 """
-California / US interest rate calculator.
-Uses fixed US baseline rates instead of country-specific ranges.
-Live web search will override these in Phase 2.
+California / US multi-loan-type interest rate calculator.
+Supports: personal, business, mortgage, margin (stock), sbloc.
 """
 
-# US baseline rates for different loan types
-# Live web search will dynamically update these in Phase 2
-US_INTEREST_RANGE = {
-    "personal": (0.065, 0.155),  # 6.5% - 15.5% personal loans
-    "mortgage": (0.055, 0.085),  # 5.5% - 8.5% mortgages
-    "business": (0.07, 0.13),  # 7% - 13% business loans
+# ─────────────────────────────────
+# 🏦 LOAN TYPE DEFINITIONS
+# Each loan type has different rate range, duration, and use case
+# ─────────────────────────────────
+LOAN_TYPES = {
+    "personal": {
+        "rate_range": (0.065, 0.155),
+        "default_years": 5,
+        "max_years": 7,
+        "dti_limit": 0.35,
+        "purpose": "general",
+        "description": "Unsecured personal loan",
+    },
+    "business": {
+        "rate_range": (0.07, 0.13),
+        "default_years": 7,
+        "max_years": 10,
+        "dti_limit": 0.35,
+        "purpose": "business",
+        "description": "Business loan for startup or operations",
+    },
+    "mortgage": {
+        "rate_range": (0.055, 0.085),
+        "default_years": 30,
+        "max_years": 30,
+        "dti_limit": 0.28,
+        "purpose": "real_estate",
+        "description": "Mortgage for real estate purchase",
+    },
+    "margin": {
+        "rate_range": (0.08, 0.13),
+        "default_years": 5,
+        "max_years": 999,
+        "dti_limit": 0.50,
+        "purpose": "stock_leveraged",
+        "description": "Margin loan for stock investing (CALLABLE — broker can force liquidation)",
+    },
+    "sbloc": {
+        "rate_range": (0.05, 0.08),
+        "default_years": 10,
+        "max_years": 20,
+        "dti_limit": 0.40,
+        "purpose": "flexible_secured",
+        "description": "Securities-backed line of credit",
+    },
 }
 
-# Default loan type (personal)
-DEFAULT_LOAN_TYPE = "personal"
+# Strategy → recommended loan type mapping
+STRATEGY_TO_LOAN_TYPE = {
+    "business":    "business",
+    "real_estate": "mortgage",
+    "stock":       "margin",       # stock_margin variant only
+    "stock_cash":  None,           # cash-only, no loan
+}
 
 
-def calculate_interest_rate(risk: dict, loan_type: str = DEFAULT_LOAN_TYPE) -> dict:
+def calculate_interest_rate(risk: dict, loan_type: str = "personal") -> dict:
     """
-    Calculates interest rate for a California user based on risk profile.
-
-    Args:
-        risk: output from risk_engine
-        loan_type: "personal", "mortgage", or "business"
-
-    Returns:
-        Dict with rate calculation breakdown
+    Calculates interest rate for given loan type based on risk profile.
     """
-
-    # ─────────────────────────
-    # 🔒 VALIDATION
-    # ─────────────────────────
-    if loan_type not in US_INTEREST_RANGE:
-        raise ValueError(f"Unsupported loan type: {loan_type}")
+    if loan_type not in LOAN_TYPES:
+        raise ValueError(f"Unsupported loan type: {loan_type}. Valid: {list(LOAN_TYPES.keys())}")
 
     if "level" not in risk or "adjusted_score" not in risk:
         raise ValueError("Invalid risk input")
 
-    # ─────────────────────────
-    # 🇺🇸 US RATE RANGE
-    # ─────────────────────────
-    min_rate, max_rate = US_INTEREST_RANGE[loan_type]
+    loan_config = LOAN_TYPES[loan_type]
+    min_rate, max_rate = loan_config["rate_range"]
 
     level = risk["level"]
     score = risk["adjusted_score"]
 
-    # ─────────────────────────
-    # 🎯 BASE (DISCRETE)
-    # ─────────────────────────
+    # 🎯 BASE (DISCRETE) by risk level
     if level == "low_risk":
         base_rate = min_rate
     elif level == "medium_risk":
@@ -57,24 +85,15 @@ def calculate_interest_rate(risk: dict, loan_type: str = DEFAULT_LOAN_TYPE) -> d
     else:
         base_rate = max_rate
 
-    # ─────────────────────────
-    # 📈 CONTINUOUS MODEL
-    # ─────────────────────────
+    # 📈 CONTINUOUS MODEL by score
     normalized = score / 15
     normalized = max(0, min(normalized, 1))
-
-    # Higher score → lower rate
     score_rate = min_rate + (max_rate - min_rate) * (1 - normalized)
 
-    # ─────────────────────────
-    # ⚖️ BLEND MODEL
-    # ─────────────────────────
+    # ⚖️ BLEND
     final_rate = (base_rate * 0.6) + (score_rate * 0.4)
     final_rate = max(min_rate, min(final_rate, max_rate))
 
-    # ─────────────────────────
-    # 📊 OUTPUT
-    # ─────────────────────────
     return {
         "interest_rate": round(final_rate, 4),
         "base_rate": round(base_rate, 4),
@@ -83,6 +102,24 @@ def calculate_interest_rate(risk: dict, loan_type: str = DEFAULT_LOAN_TYPE) -> d
         "max_rate": max_rate,
         "risk_level": level,
         "loan_type": loan_type,
-        "country": "US",  # backward compat
+        "loan_description": loan_config["description"],
+        "default_years": loan_config["default_years"],
+        "max_years": loan_config["max_years"],
+        "dti_limit": loan_config["dti_limit"],
+        "country": "US",
         "score": score,
+    }
+
+
+def calculate_all_loan_rates(risk: dict) -> dict:
+    """
+    Calculates rates for ALL loan types simultaneously.
+    Used by orchestrator to give each strategy its proper loan.
+    """
+    return {
+        "personal":  calculate_interest_rate(risk, "personal"),
+        "business":  calculate_interest_rate(risk, "business"),
+        "mortgage":  calculate_interest_rate(risk, "mortgage"),
+        "margin":    calculate_interest_rate(risk, "margin"),
+        "sbloc":     calculate_interest_rate(risk, "sbloc"),
     }

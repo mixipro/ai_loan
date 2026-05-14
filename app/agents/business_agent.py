@@ -4,6 +4,9 @@ from app.services.llm_service import call_llm_text as call_llm
 from app.agents._common import parse_llm_json, clamp, safe_list, safe_str, safe_dict, call_llm_with_retry
 from app.core.california_config import REGION_DATA
 
+# ─────────────────────────────────
+# 📊 WEEKLY HOURS CONFIGURATION
+# ─────────────────────────────────
 HOURS_DESCRIPTIONS = {
     "0-5": "Less than 5h/week (PASSIVE — needs automation, hands-off operation)",
     "5-15": "5-15h/week (LIGHT — weekend/evening side hustle, productized service)",
@@ -11,14 +14,56 @@ HOURS_DESCRIPTIONS = {
     "30+": "30+h/week (HEAVY — can run full operation, scaling business)"
 }
 
+# ⭐ BUG #3 FIX: Realistic returns for serious commitment
+# Previous caps were too conservative (Founder at 15% couldn't beat cash 13%)
+# New caps reflect real CA market: serious businesses CAN target higher returns
+HOURS_RETURN_CAP = {
+    "0-5": {"max": 0.07, "label": "passive (3-7% realistic)"},
+    "5-15": {"max": 0.12, "label": "light effort (7-12% realistic)"},  # ⭐ was 0.10
+    "15-30": {"max": 0.16, "label": "moderate (10-16% realistic)"},  # ⭐ was 0.13
+    "30+": {"max": 0.20, "label": "full commitment (15-20% realistic)"},  # ⭐ was 0.15
+}
 
-def build_prompt(user, loan: dict) -> str:
+# ⭐ BUG #3 FIX: Horizon adjustment
+# Early-stage businesses (1-3yr) target higher growth (acquisition/exit)
+# Mature businesses (8+yr) settle at steady-state returns
+HORIZON_RETURN_MODIFIER = {
+    "1-3": 1.20,  # Early stage: aim higher (e.g. 20% × 1.2 = 24% capped at 25%)
+    "3-5": 1.10,  # Growth stage
+    "5-8": 1.00,  # Established
+    "8+": 0.85,  # Mature: lower steady state
+}
+
+
+def _calculate_max_return(user) -> float:
+    """
+    Calculates max realistic expected_return based on hours + horizon.
+    Used by both prompt building and post-validation clamping.
+    """
+    if user is None:
+        return 0.15
+
+    hours_value = user.professional.weekly_hours.value
+    horizon_value = user.preferences.horizon.value
+
+    base_max = HOURS_RETURN_CAP.get(hours_value, {"max": 0.10})["max"]
+    modifier = HORIZON_RETURN_MODIFIER.get(horizon_value, 1.0)
+
+    # Absolute ceiling 25% (no business sustainably returns more than this)
+    return min(base_max * modifier, 0.25)
+
+
+# ─────────────────────────────────
+# 🎯 BUILD PROMPT (with loan)
+# ─────────────────────────────────
+def build_prompt(user, business_loan: dict) -> str:
+    """
+    Builds prompt for business agent (with business loan).
+    """
     total_capital = user.financial.savings
+    if business_loan.get("approved"):
+        total_capital += business_loan.get("max_loan_amount", 0)
 
-    if loan.get("approved"):
-        total_capital += loan.get("max_loan_amount", 0)
-
-    # California region context
     region = user.location.region
     region_data = REGION_DATA[region]
     primary_industries = ", ".join(region_data["primary_industries"])
@@ -28,17 +73,33 @@ def build_prompt(user, loan: dict) -> str:
         if user.professional.interests
         else "Not specified"
     )
-
     experience_text = user.professional.prior_experience or "No prior business experience"
 
-    hours_desc = HOURS_DESCRIPTIONS.get(
-        user.professional.weekly_hours.value,
-        "Unknown availability"
+    hours_value = user.professional.weekly_hours.value
+    hours_desc = HOURS_DESCRIPTIONS.get(hours_value, "Unknown availability")
+
+    # ⭐ Calculate max_return using new horizon-adjusted formula
+    max_return = _calculate_max_return(user)
+    hours_cap = HOURS_RETURN_CAP.get(hours_value, {"max": 0.10, "label": "moderate"})
+    return_label = hours_cap["label"]
+
+    tech_role = (
+        user.professional.tech_role.value
+        if user.professional.tech_role
+        else "N/A"
+    )
+    equity = (
+        user.professional.equity_compensation.value
+        if user.professional.equity_compensation
+        else "N/A"
     )
 
-    # ⭐ California-specific context
-    tech_role = user.professional.tech_role.value if user.professional.tech_role else "N/A"
-    equity = user.professional.equity_compensation.value if user.professional.equity_compensation else "N/A"
+    loan_rate_pct = business_loan.get("interest_rate", 0) * 100
+    loan_amount = business_loan.get("max_loan_amount", 0)
+    loan_years = business_loan.get("loan_years", 7)
+    monthly_payment = business_loan.get("monthly_payment", 0)
+    total_paid = business_loan.get("total_paid", 0)
+    total_interest = business_loan.get("total_interest", 0)
 
     return f"""
 You are a senior California business strategist and startup advisor.
@@ -64,15 +125,19 @@ FINANCIAL DATA:
 - Monthly income: ${user.financial.income} USD
 - Monthly expenses: ${user.financial.expenses} USD
 - Savings: ${user.financial.savings} USD
-- Total available capital: ${round(total_capital, 2)} USD
+- Total available capital (savings + business loan): ${round(total_capital, 2)} USD
 - Cost of living index: {region_data['cost_of_living_index']}x US average
 
-LOAN CONDITIONS:
-- Approved: {loan.get("approved")}
-- Max loan: ${loan.get("max_loan_amount", 0)}
-- Interest rate: {loan.get("interest_rate")}
-- Monthly payment: ${loan.get("monthly_payment", 0)}
-- Loan years: {loan.get("loan_years")}
+🏦 BUSINESS LOAN CONDITIONS (specific for this strategy):
+- Loan type: BUSINESS LOAN (NOT personal — terms specific to business financing)
+- Approved: {business_loan.get("approved")}
+- Max loan amount: ${loan_amount} USD
+- Interest rate: {loan_rate_pct:.2f}% APR
+- Loan term: {loan_years} years
+- Monthly payment: ${monthly_payment}
+- 💰 REAL COST: User pays ${total_paid} total over {loan_years} years
+  (interest alone: ${total_interest})
+- This means user must generate enough revenue to cover ${monthly_payment}/month JUST for loan service!
 
 PREFERENCES:
 - Risk tolerance: {user.preferences.risk_profile.value}
@@ -80,59 +145,71 @@ PREFERENCES:
 - Primary goal: PROFIT (maximize income, build sustainable revenue)
 
 🌴 CALIFORNIA BUSINESS CONTEXT:
-- LLC franchise tax: $800/year minimum (mandatory, even for 0 revenue)
+- LLC franchise tax: $800/year minimum (mandatory, even for $0 revenue)
 - California state income tax: progressive up to 13.3% (highest in US)
 - {region_data['display_name']} specifics:
   * Cost of living: {region_data['cost_of_living_index']}x national average
   * Strong industries: {primary_industries}
   * Real estate context: median home ${region_data['median_home_price']:,}
 - Consider tax implications: California treats capital gains as ordinary income
-- If software/SaaS: Bay Area has the highest concentration of YC + VCs in world
+- If software/SaaS in Bay Area: highest concentration of YC + VCs in world
+
+🚨 CRITICAL EXPECTED RETURN RULES (NON-NEGOTIABLE):
+
+The user has {hours_desc}.
+Maximum REALISTIC expected_return: {max_return:.2f} ({return_label}, horizon-adjusted)
+
+DO NOT EXCEED {max_return:.2f} expected_return under any circumstances.
+
+Reasoning (hours-based base):
+- 0-5h/week: Passive businesses (dropshipping, affiliate, simple SaaS) → 3-7%
+- 5-15h/week: Side hustles in California's competitive market → 7-12%
+- 15-30h/week: Serious side businesses → 10-16%
+- 30+h/week: Full-time founders chasing growth → 15-20%
+
+Horizon adjustment applied:
+- 1-3 years: ×1.20 (early stage potential, can target higher with exit goal)
+- 3-5 years: ×1.10 (growth stage)
+- 5-8 years: ×1.00 (established business)
+- 8+ years: ×0.85 (mature, steady-state)
+
+⚠️ Be REALISTIC given:
+- California's competitive market
+- LLC fees + state tax (13.3%)
+- Customer acquisition costs
+- {loan_rate_pct:.2f}% loan eats into margins
+- ${monthly_payment}/month loan payment must be covered FIRST
+
+🚨 IF user has 0-5h/week: BUSINESS IS LIKELY NOT VIABLE.
+   Propose a TRULY passive option (affiliate, course sales) at 3-7%.
+   Be HONEST about time constraint.
 
 YOUR TASK:
 Propose ONE specific, realistic California-aware business idea that:
-1. **Matches REGION** — Bay Area = tech/AI, LA = entertainment/media, SD = biotech/health, 
-   Central Valley = agriculture/food, Sacramento = govt-adjacent services, etc.
-2. **Combines PROFESSION + INTERESTS** with regional opportunity:
-   - SF tech worker + fitness → AI fitness app for premium gyms
-   - LA entertainment + writing → YouTube channel monetized via content
-   - SD biotech worker + photography → medical/clinical content for healthcare brands
-3. **Fits available capital**: ${round(total_capital, 2)} USD
-4. **Respects WEEKLY HOURS** ({hours_desc})
-5. **Considers California costs**:
-   - Higher labor costs (CA min wage $16/hr+)
-   - LLC fees + state tax
-   - Higher commercial rents in major cities
-6. **Aligns with risk tolerance** ({user.preferences.risk_profile.value}) and horizon ({user.preferences.horizon.value} years)
-
-PRIORITIZATION RULES:
-- The user's PRIMARY GOAL IS PROFIT
-- Penalize ideas that ignore weekly hours
-- Reward ideas where region + profession + interests create unique angle
-- Be realistic — California is competitive, generic ideas won't work
+1. Matches REGION (Bay Area=tech, LA=entertainment, SD=biotech, CV=agriculture, etc.)
+2. Combines PROFESSION + INTERESTS with regional opportunity
+3. Fits ${round(total_capital, 2)} capital
+4. RESPECTS WEEKLY HOURS (most important!)
+5. Considers California costs
+6. Aligns with risk ({user.preferences.risk_profile.value}) and horizon ({user.preferences.horizon.value})
 
 REQUIRED FIELDS:
-1. title — short business name/concept (5-10 words)
-2. description — what the business does, why it fits user + California context (2-3 sentences)
-3. allocation — how to split capital (USD amounts, must include LLC formation $800 reserve)
-4. expected_return — annual return as decimal (0.05–0.30)
-5. risk — risk level as decimal (0–1)
-6. stability — stability as decimal (0–1)
-7. pros — 3 specific advantages
-8. cons — 2 specific risks/challenges (be honest about California costs/competition)
-9. next_steps — 3 concrete actions (mention CA-specific: LLC filing, seller's permit if retail)
+1. title — short business name/concept
+2. description — 2-3 sentences, California-aware
+3. allocation — capital split, must sum to ${round(total_capital, 2)}, reserve ≥ 10%
+4. expected_return — annual decimal (MAX {max_return:.2f})
+5. risk — 0–1
+6. stability — 0–1
+7. pros — 3 advantages
+8. cons — 2 honest risks
+9. next_steps — 3 concrete actions
 10. time_to_profit — realistic timeframe
 
 STRICT RULES:
 - Return ONLY valid JSON, no markdown fences
 - All monetary amounts in USD
-- Be SPECIFIC and California-aware
-
-ALLOCATION RULES (CRITICAL):
-- NEVER return zero values in allocation fields
-- Allocation amounts MUST sum to approximately ${round(total_capital, 2)} USD
-- Verify your math: initial_investment + working_capital + marketing_budget + reserve = ${round(total_capital, 2)}
-- reserve should be minimum 10% as safety buffer (cover LLC tax + emergencies)
+- expected_return MUST be ≤ {max_return:.2f}
+- Allocation sum ≈ ${round(total_capital, 2)} USD
 
 FORMAT:
 {{
@@ -145,7 +222,7 @@ FORMAT:
     "marketing_budget": 0,
     "reserve": 0
   }},
-  "expected_return": 0.15,
+  "expected_return": {max_return:.2f},
   "risk": 0.5,
   "stability": 0.7,
   "pros": ["...", "...", "..."],
@@ -156,16 +233,155 @@ FORMAT:
 """
 
 
-async def generate_business_idea_llm(user, loan: dict) -> dict:
-    prompt = build_prompt(user, loan)
+# ─────────────────────────────────
+# 🎯 BUILD PROMPT — CASH ONLY (no loan)
+# ⭐ NEW: For business_cash strategy
+# ─────────────────────────────────
+def build_prompt_cash(user) -> str:
+    """
+    Builds prompt for business agent with NO LOAN (cash-only strategy).
+    Uses only savings as capital.
+    """
+    total_capital = user.financial.savings  # cash only
 
+    region = user.location.region
+    region_data = REGION_DATA[region]
+    primary_industries = ", ".join(region_data["primary_industries"])
+
+    interests_text = (
+        ", ".join(user.professional.interests)
+        if user.professional.interests
+        else "Not specified"
+    )
+    experience_text = user.professional.prior_experience or "No prior business experience"
+
+    hours_value = user.professional.weekly_hours.value
+    hours_desc = HOURS_DESCRIPTIONS.get(hours_value, "Unknown availability")
+
+    max_return = _calculate_max_return(user)
+    hours_cap = HOURS_RETURN_CAP.get(hours_value, {"max": 0.10, "label": "moderate"})
+    return_label = hours_cap["label"]
+
+    tech_role = user.professional.tech_role.value if user.professional.tech_role else "N/A"
+    equity = user.professional.equity_compensation.value if user.professional.equity_compensation else "N/A"
+
+    return f"""
+You are a senior California business strategist proposing a CASH-FUNDED business (no loan).
+
+Your task is to propose ONE realistic California-aware business idea that uses ONLY the user's savings.
+
+USER PROFILE:
+- Age: {user.personal.age}
+- Region: {region_data['display_name']} ({region.value})
+- City: {user.location.city}
+- Primary regional industries: {primary_industries}
+- Profession: {user.professional.profession.value}
+- Sector: {user.professional.sector.value}
+- Tech role: {tech_role}, Equity: {equity}
+- Interests: {interests_text}
+- Experience: {experience_text}
+- Weekly hours: {hours_desc}
+
+💰 CASH-ONLY CAPITAL (NO LOAN):
+- Available: ${user.financial.savings} USD from savings
+- This is CONSERVATIVE bootstrap: no debt, no monthly loan burden, no personal guarantee
+- Lower-risk approach: business failure won't leave user in debt
+- Scale must fit savings — smaller startup, more bootstrap-friendly
+
+PREFERENCES:
+- Risk: {user.preferences.risk_profile.value}
+- Horizon: {user.preferences.horizon.value} years
+
+🌴 CALIFORNIA CONTEXT:
+- LLC franchise tax: $800/year minimum
+- State income tax up to 13.3%
+- {region_data['display_name']}: COL {region_data['cost_of_living_index']}x
+
+🚨 EXPECTED RETURN RULES:
+The user has {hours_desc}.
+Maximum REALISTIC expected_return: {max_return:.2f} ({return_label}, horizon-adjusted)
+DO NOT EXCEED {max_return:.2f}.
+
+⭐ CASH-ONLY ADVANTAGE: No loan payment burden means MORE of revenue goes to profit.
+   This makes cash businesses MORE attractive than loan-funded for smaller scales.
+
+YOUR TASK:
+Propose ONE bootstrap-style California business idea that:
+1. Fits ${user.financial.savings} USD capital (smaller scale than loan-funded)
+2. Matches region + profession + interests
+3. RESPECTS WEEKLY HOURS
+4. Can start lean and grow organically
+5. Examples: dropshipping, content business, productized service, micro-SaaS, 
+   consulting, online course, niche e-commerce
+
+REQUIRED FIELDS (return ONLY JSON):
+{{
+  "agent": "business_cash",
+  "title": "[Cash-Only] ...",
+  "description": "2-3 sentences emphasizing bootstrap approach + California angle",
+  "allocation": {{
+    "initial_investment": 0,
+    "working_capital": 0,
+    "marketing_budget": 0,
+    "reserve": 0
+  }},
+  "expected_return": {max_return:.2f},
+  "risk": 0.4,
+  "stability": 0.7,
+  "pros": ["No loan burden — full profit retained", "...", "..."],
+  "cons": ["Limited initial scale", "..."],
+  "next_steps": ["File LLC", "...", "..."],
+  "time_to_profit": "..."
+}}
+
+STRICT RULES:
+- Allocation must sum to ${user.financial.savings} USD
+- Reserve ≥ 15% (cash-only needs bigger safety net since no loan to fall back on)
+- expected_return ≤ {max_return:.2f}
+- "agent" field MUST be "business_cash"
+"""
+
+
+# ─────────────────────────────────
+# 🤖 LLM CALL (with loan)
+# ─────────────────────────────────
+async def generate_business_idea_llm(user, business_loan: dict) -> dict:
+    """Generates business idea using LLM with business loan context."""
+    prompt = build_prompt(user, business_loan)
     return await call_llm_with_retry(
         llm_call=lambda: call_llm(prompt),
         agent_name="business"
     )
 
 
-def validate_business_output(data: dict) -> dict:
+# ─────────────────────────────────
+# 🤖 LLM CALL (cash only)
+# ⭐ NEW
+# ─────────────────────────────────
+async def generate_business_cash_idea_llm(user) -> dict:
+    """Generates business idea using LLM with NO loan (cash-only)."""
+    prompt = build_prompt_cash(user)
+    return await call_llm_with_retry(
+        llm_call=lambda: call_llm(prompt),
+        agent_name="business_cash"
+    )
+
+
+# ─────────────────────────────────
+# ✅ VALIDATE OUTPUT (with hard cap)
+# ⭐ Now uses _calculate_max_return for horizon-adjusted cap
+# ─────────────────────────────────
+def validate_business_output(data: dict, user=None) -> dict:
+    """
+    Validates business agent output and applies post-validation clamps.
+    Uses horizon-adjusted max_return (HOURS_RETURN_CAP × HORIZON_RETURN_MODIFIER).
+    """
+    # ⭐ BUG #3 FIX: Use horizon-adjusted max_return
+    max_return = _calculate_max_return(user)
+
+    raw_return = data.get("expected_return", 0.10)
+    capped_return = clamp(raw_return, 0.01, max_return, 0.07)
+
     return {
         "agent": "business",
         "title": safe_str(data.get("title"), "Business opportunity"),
@@ -179,9 +395,9 @@ def validate_business_output(data: dict) -> dict:
             "marketing_budget": 0,
             "reserve": 0,
         }),
-        "expected_return": clamp(data.get("expected_return"), 0.01, 0.3, 0.1),
-        "risk": clamp(data.get("risk"), 0, 1, 0.5),
-        "stability": clamp(data.get("stability"), 0, 1, 0.5),
+        "expected_return": capped_return,
+        "risk": round(clamp(data.get("risk"), 0, 1, 0.5), 4),
+        "stability": round(clamp(data.get("stability"), 0, 1, 0.5), 4),
         "pros": safe_list(data.get("pros"), []),
         "cons": safe_list(data.get("cons"), []),
         "next_steps": safe_list(data.get("next_steps"), []),
@@ -189,6 +405,62 @@ def validate_business_output(data: dict) -> dict:
     }
 
 
-async def run_business_agent(user, loan: dict) -> dict:
-    raw = await generate_business_idea_llm(user, loan)
-    return validate_business_output(raw)
+# ─────────────────────────────────
+# ✅ VALIDATE OUTPUT — CASH variant
+# ⭐ NEW
+# ─────────────────────────────────
+def validate_business_cash_output(data: dict, user=None) -> dict:
+    """Same validation as regular business, but with agent='business_cash'."""
+    max_return = _calculate_max_return(user)
+    raw_return = data.get("expected_return", 0.08)
+    # ⭐ BUG #7 FIX: Round to avoid float precision artifacts
+    capped_return = round(clamp(raw_return, 0.01, max_return, 0.07), 4)
+
+    title = safe_str(data.get("title"), "Cash-Only Business")
+    # Ensure title has cash marker
+    if not title.startswith("[Cash"):
+        title = f"[Cash-Only] {title}"
+
+    return {
+        "agent": "business_cash",  # ⭐ Different agent name
+        "title": title,
+        "description": safe_str(
+            data.get("description"),
+            "A bootstrap business venture using only savings — no loan burden."
+        ),
+        "allocation": safe_dict(data.get("allocation"), {
+            "initial_investment": 0,
+            "working_capital": 0,
+            "marketing_budget": 0,
+            "reserve": 0,
+        }),
+        "expected_return": capped_return,
+        "risk": round(clamp(data.get("risk"), 0, 1, 0.4), 4),
+        "stability": round(clamp(data.get("stability"), 0, 1, 0.7), 4),
+        "pros": safe_list(data.get("pros"), ["No loan burden — full profit retained"]),
+        "cons": safe_list(data.get("cons"), ["Limited initial scale"]),
+        "next_steps": safe_list(data.get("next_steps"), []),
+        "time_to_profit": safe_str(data.get("time_to_profit"), "6-12 months"),
+    }
+
+
+# ─────────────────────────────────
+# 🚀 MAIN AGENT FUNCTION (with loan)
+# ─────────────────────────────────
+async def run_business_agent(user, business_loan: dict) -> dict:
+    """Business agent with business loan."""
+    raw = await generate_business_idea_llm(user, business_loan)
+    return validate_business_output(raw, user=user)
+
+
+# ─────────────────────────────────
+# 🚀 MAIN AGENT FUNCTION — CASH ONLY
+# ⭐ NEW
+# ─────────────────────────────────
+async def run_business_agent_cash(user) -> dict:
+    """
+    Business agent funded by savings only — NO loan.
+    ⭐ Provides bootstrap alternative for users with sufficient savings.
+    """
+    raw = await generate_business_cash_idea_llm(user)
+    return validate_business_cash_output(raw, user=user)

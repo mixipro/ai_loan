@@ -1,3 +1,7 @@
 .venv/
 __pycache__/
 .env
+
+# FAISS generated index
+app/rag/faiss_index/*.bin
+app/rag/faiss_index/*.pkl
