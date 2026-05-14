@@ -15,11 +15,18 @@ HOURS_RE_DESCRIPTIONS = {
 }
 
 
-def build_prompt(user, loan: dict) -> str:
+def build_prompt(user, mortgage_loan: dict) -> str:
+    """
+    Builds prompt for real estate agent.
+
+    Args:
+        user: UserInput
+        mortgage_loan: 30-year mortgage offer (NOT personal loan!)
+    """
     total_capital = user.financial.savings
 
-    if loan.get("approved"):
-        total_capital += loan.get("max_loan_amount", 0)
+    if mortgage_loan.get("approved"):
+        total_capital += mortgage_loan.get("max_loan_amount", 0)
 
     interests_text = (
         ", ".join(user.professional.interests)
@@ -34,10 +41,19 @@ def build_prompt(user, loan: dict) -> str:
         "Unknown availability"
     )
 
-    # ⭐ California-specific data
+    # California-specific data
     region = user.location.region
     region_data = REGION_DATA[region]
     city_data = get_city_real_estate_data(user.location.city, region)
+
+    # Mortgage details
+    mortgage_amount = mortgage_loan.get("max_loan_amount", 0)
+    mortgage_rate = mortgage_loan.get("interest_rate", 0)
+    mortgage_rate_pct = mortgage_rate * 100
+    mortgage_years = mortgage_loan.get("loan_years", 30)
+    mortgage_monthly = mortgage_loan.get("monthly_payment", 0)
+    mortgage_total_paid = mortgage_loan.get("total_paid", 0)
+    mortgage_total_interest = mortgage_loan.get("total_interest", 0)
 
     # Calculate down payment thresholds
     median_price = region_data["median_home_price"]
@@ -57,13 +73,17 @@ USER PROFILE:
 FINANCIAL DATA:
 - Monthly income: ${user.financial.income} USD
 - Savings: ${user.financial.savings} USD
-- Total available capital: ${round(total_capital, 2)} USD
+- Total available capital (savings + mortgage): ${round(total_capital, 2)} USD
 
-LOAN CONDITIONS:
-- Approved: {loan.get("approved")}
-- Max loan: ${loan.get("max_loan_amount", 0)}
-- Interest rate: {loan.get("interest_rate")}
-- Monthly payment: ${loan.get("monthly_payment", 0)}
+🏦 MORTGAGE CONDITIONS (specific for real estate strategy):
+- Loan type: 30-YEAR FIXED MORTGAGE (NOT personal loan — much better terms!)
+- Approved: {mortgage_loan.get("approved")}
+- Max mortgage amount: ${mortgage_amount} USD
+- Interest rate: {mortgage_rate_pct:.2f}% APR (lower than personal loans!)
+- Term: {mortgage_years} years
+- Monthly payment: ${mortgage_monthly}
+- 💰 TOTAL COST: ${mortgage_total_paid} over {mortgage_years} years
+  (interest alone: ${mortgage_total_interest})
 
 PREFERENCES:
 - Risk tolerance: {user.preferences.risk_profile.value}
@@ -76,7 +96,7 @@ PREFERENCES:
 - Property tax (Prop 13 effective): {city_data['property_tax_effective'] * 100:.2f}%
 - Rental yield average: {city_data['rental_yield_avg'] * 100:.1f}%
 - Risk factors: {region_data['risk_factors']}
-- Required down payment for median ($-20%): ${down_20pct:,.0f}
+- Required down payment for median (20%): ${down_20pct:,.0f}
 
 ═══════════════════════════════════════════════════════════
 🏛️ CALIFORNIA-SPECIFIC RULES (CRITICAL):
@@ -86,9 +106,8 @@ PREFERENCES:
    - Property tax capped at 1% of purchase price + local fees
    - Annual increase: max 2% per year
    - Reassessment ONLY on sale → buying today LOCKS IN low taxes for life
-   - Owner who bought 30 years ago pays MUCH less than new buyer
 
-2. **California REITs available** (US-developed market):
+2. **California REITs available**:
    - VNQ (Vanguard Real Estate ETF)
    - SCHH (Schwab US REIT)
    - IYR (iShares US Real Estate)
@@ -96,39 +115,39 @@ PREFERENCES:
 
 3. **1031 Exchange** (defer capital gains by swapping properties)
 
-4. **Mello-Roos taxes** (special assessments in newer developments — Inland Empire, Sacramento suburbs)
-   - Can add 0.5-2% to property tax bill
+4. **Mello-Roos taxes** (special assessments in newer developments)
 
 5. **California Earthquake Risk**:
    - {region_data['risk_factors'].get('earthquake', 'unknown')} for {region_data['display_name']}
-   - Standard insurance doesn't cover — separate CEA policy: $800-3,000/year
-   - 10-20% deductible (high!)
+   - Separate CEA policy: $800-3,000/year
 
 6. **Wildfire Risk**:
    - {region_data['risk_factors'].get('wildfire', 'unknown')} for {region_data['display_name']}
-   - High-risk areas: major insurers refusing new policies
-   - Can affect mortgage approval
 
 ═══════════════════════════════════════════════════════════
-🏠 CALIFORNIA CAPITAL DECISION TREE:
+🏠 CAPITAL DECISION TREE:
 ═══════════════════════════════════════════════════════════
 
-User's capital: ${round(total_capital, 2)} USD
+User's total capital (savings + mortgage): ${round(total_capital, 2)} USD
 Median home in {region_data['display_name']}: ${median_price:,}
 20% down on median: ${down_20pct:,.0f}
 
-IF capital >= ${down_20pct:,.0f}:
-    → PRIMARY: Direct purchase in {user.location.city}
+IF total_capital >= ${median_price:,.0f}:
+    → PRIMARY: Direct purchase in {user.location.city} (savings = down payment)
     → Lock in Prop 13 tax benefit FOREVER
     → Type: "rental" (long-term) or "primary" (residence)
 
-ELIF capital >= ${down_20pct * 0.5:,.0f}:
-    → PRIMARY: REIT-heavy portfolio (VNQ, SCHH)
-    → SECONDARY: Possibly cheaper region within CA
+ELIF user.savings >= ${down_20pct:,.0f}:
+    → PRIMARY: Use savings as 20% down + mortgage for rest
+    → Type: "rental" or "primary"
+
+ELIF user.savings >= ${down_20pct * 0.5:,.0f}:
+    → PRIMARY: REIT-heavy portfolio (mortgage not used effectively)
+    → SECONDARY: Cheaper region within CA
     → Type: "REIT" or "mixed"
 
-ELIF capital >= $20,000:
-    → PRIMARY: REIT only (VNQ + SCHH diversified)
+ELIF user.savings >= $20,000:
+    → PRIMARY: REIT only (VNQ + SCHH diversified) — NO MORTGAGE
     → Type: "REIT"
 
 ELSE:
@@ -138,7 +157,7 @@ ELSE:
 ═══════════════════════════════════════════════════════════
 TIME COMMITMENT FILTER:
 ═══════════════════════════════════════════════════════════
-- 0-5h/week → REIT only (VNQ, SCHH)
+- 0-5h/week → REIT only
 - 5-15h/week → REIT-heavy, or single rental WITH property manager (-10% rent)
 - 15-30h/week → direct rental OK, owner-managed
 - 30+h/week → flip projects, multi-unit OK
@@ -146,26 +165,27 @@ TIME COMMITMENT FILTER:
 ═══════════════════════════════════════════════════════════
 INTERESTS BONUS:
 ═══════════════════════════════════════════════════════════
-- Loves "design"/"interior design" → flip projects in {user.location.city}
-- Loves "travel" → Airbnb / short-term rental
-- Loves "sustainability" → green retrofits + solar (CA tax credits!)
-- Loves "real estate" → can suggest advanced strategies (1031, BRRRR)
+- "design"/"interior design" → flip projects
+- "travel" → Airbnb / short-term rental
+- "sustainability" → green retrofits + solar (CA tax credits!)
+- "real estate" → advanced strategies (1031, BRRRR)
 
 ═══════════════════════════════════════════════════════════
 HONESTY RULES:
 ═══════════════════════════════════════════════════════════
-- Be honest about California costs (high property tax base, but Prop 13 helps long-term)
-- Don't sugarcoat earthquake/wildfire risks for the region
-- {user.location.city} is expensive — if user can't afford, suggest cheaper CA regions or REIT
+- Be honest about California costs
+- Don't sugarcoat earthquake/wildfire risks
+- {user.location.city} is expensive — if user can't afford, suggest REIT or cheaper region
 - DO NOT invent ticker symbols
+- ⚠️ Be HONEST about mortgage burden: ${mortgage_monthly}/mo for 30 years is REAL commitment
+- ⚠️ If user doesn't choose direct property, mortgage isn't used → ignore mortgage in allocation
 
 ═══════════════════════════════════════════════════════════
 ALLOCATION RULES (CRITICAL):
 ═══════════════════════════════════════════════════════════
-- NEVER return zero values in allocation fields (except renovation_reserve for REIT)
-- Allocation sum MUST equal approximately ${round(total_capital, 2)} USD
-- If buying property in {user.location.city}, down_payment should match Step calculation
-- Verify: down_payment + taxes_and_fees + renovation_reserve + emergency_fund ≈ ${round(total_capital, 2)}
+- NEVER return zero values (except renovation_reserve for REIT)
+- For REIT-only strategy: allocation should sum to user.savings (mortgage NOT used)
+- For direct property: allocation should sum to ${round(total_capital, 2)} (savings + mortgage)
 - emergency_fund: minimum 10-15% of total
 - taxes_and_fees: 3-5% of property value (closing costs, escrow)
 
@@ -173,21 +193,21 @@ ALLOCATION RULES (CRITICAL):
 
 REQUIRED FIELDS:
 1. title — short strategy name (e.g., "Prop 13-Locked Rental in Oakland")
-2. type — one of: "REIT" | "rental" | "flip" | "mortgage" | "land" | "garage" | "storage" | "commercial" | "mixed"
+2. type — one of: "REIT" | "rental" | "flip" | "mortgage" | "land" | "garage" | "storage" | "commercial" | "mixed" | "primary"
 3. description — California-aware strategy (mention Prop 13, regional dynamics, 3-4 sentences)
 4. allocation — concrete USD split
 5. expected_return — annual return (0.03–0.12)
 6. risk — risk level (0–1)
 7. stability — stability (0–1)
-8. pros — 3 advantages (mention Prop 13 lock-in if buying!)
-9. cons — 2 risks (honest about earthquake/wildfire/CA costs)
-10. next_steps — 3 concrete actions (CA-specific: title insurance, earthquake assessment, etc.)
+8. pros — 3 advantages
+9. cons — 2 risks (honest about earthquake/wildfire/mortgage burden)
+10. next_steps — 3 concrete actions (CA-specific)
 11. time_to_profit — realistic timeline
 
 STRICT RULES:
 - Return ONLY valid JSON, no markdown fences
-- Mention California-specific advantages where relevant
 - All amounts in USD
+- For direct property: factor in mortgage payment ${mortgage_monthly}/mo
 
 FORMAT:
 {{
@@ -212,8 +232,8 @@ FORMAT:
 """
 
 
-async def generate_real_estate_strategy_llm(user, loan: dict) -> dict:
-    prompt = build_prompt(user, loan)
+async def generate_real_estate_strategy_llm(user, mortgage_loan: dict) -> dict:
+    prompt = build_prompt(user, mortgage_loan)
 
     return await call_llm_with_retry(
         llm_call=lambda: call_llm(prompt),
@@ -230,6 +250,32 @@ def validate_real_estate_output(data: dict) -> dict:
     if type_value not in valid_types:
         type_value = "REIT"
 
+    # ⭐ BUG #5 FIX: REIT realistic risk/stability calibration
+    # REIT volatility is similar to S&P 500 (beta 0.85-1.1)
+    # Direct property (rental/flip) has more stability due to physical asset
+    if type_value == "REIT":
+        # REIT: trades like stocks, moderate volatility
+        default_risk = 0.40         # was 0.20 — REIT has real stock-like volatility
+        default_stability = 0.70    # was 0.85 — REIT can drop 20-40% in bear market
+        risk_min, risk_max = 0.30, 0.65
+        stab_min, stab_max = 0.50, 0.80
+    else:
+        # Direct property (rental, flip): real physical asset
+        default_risk = 0.30
+        default_stability = 0.80
+        risk_min, risk_max = 0.20, 0.70
+        stab_min, stab_max = 0.60, 0.90
+
+    # ⭐ BUG #7 FIX: Round all numeric values to avoid float precision artifacts
+    raw_return = data.get("expected_return")
+    expected_return = round(clamp(raw_return, 0.01, 0.12, 0.05), 4)
+
+    raw_risk = data.get("risk")
+    risk_value = round(clamp(raw_risk, risk_min, risk_max, default_risk), 4)
+
+    raw_stability = data.get("stability")
+    stability_value = round(clamp(raw_stability, stab_min, stab_max, default_stability), 4)
+
     return {
         "agent": "real_estate",
         "title": safe_str(data.get("title"), "Real Estate Investment"),
@@ -244,9 +290,9 @@ def validate_real_estate_output(data: dict) -> dict:
             "renovation_reserve": 0,
             "emergency_fund": 0,
         }),
-        "expected_return": clamp(data.get("expected_return"), 0.01, 0.12, 0.05),
-        "risk": clamp(data.get("risk"), 0, 1, 0.3),
-        "stability": clamp(data.get("stability"), 0, 1, 0.8),
+        "expected_return": expected_return,
+        "risk": risk_value,
+        "stability": stability_value,
         "pros": safe_list(data.get("pros"), []),
         "cons": safe_list(data.get("cons"), []),
         "next_steps": safe_list(data.get("next_steps"), []),
@@ -254,6 +300,6 @@ def validate_real_estate_output(data: dict) -> dict:
     }
 
 
-async def run_real_estate_agent(user, loan: dict) -> dict:
-    raw = await generate_real_estate_strategy_llm(user, loan)
+async def run_real_estate_agent(user, mortgage_loan: dict) -> dict:
+    raw = await generate_real_estate_strategy_llm(user, mortgage_loan)
     return validate_real_estate_output(raw)
