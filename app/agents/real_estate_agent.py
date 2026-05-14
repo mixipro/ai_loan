@@ -6,6 +6,46 @@ from app.agents._common import (
     call_llm_with_retry
 )
 from app.core.california_config import REGION_DATA, get_city_real_estate_data
+from app.rag.retriever import retrieve  # ⭐ RAG retriever
+
+
+# ─────────────────────────────────
+# 📚 RAG CONTEXT BUILDER
+# ─────────────────────────────────
+def _build_rag_context_re(user) -> tuple[str, list]:
+    """
+    Retrieves California real estate knowledge based on user profile.
+    """
+    region = user.location.region.value
+    city = user.location.city
+    interests = ", ".join(user.professional.interests) if user.professional.interests else ""
+
+    # Build semantic queries
+    primary_query = f"California {region} {city} real estate market Prop 13 {interests}"
+    secondary_query = "California real estate tax mortgage REIT Mello-Roos"
+
+    re_chunks = retrieve(primary_query, top_k=2, category_filter="real_estate")
+    tax_chunks = retrieve(secondary_query, top_k=1, category_filter="tax")
+
+    all_chunks = re_chunks + tax_chunks
+
+    if not all_chunks:
+        return "", []
+
+    context_parts = ["📚 RELEVANT CALIFORNIA REAL ESTATE KNOWLEDGE BASE:\n"]
+    for i, chunk in enumerate(all_chunks, 1):
+        context_parts.append(
+            f"\n═══ Knowledge {i}: {chunk['id']} "
+            f"(relevance: {chunk['similarity_score'] * 100:.0f}%) ═══\n"
+            f"Category: {chunk['category']} | Sources: {chunk.get('sources', 'N/A')}\n\n"
+            f"{chunk['content'][:800]}\n"
+        )
+
+    context_text = "\n".join(context_parts)
+    chunk_ids = [c['id'] for c in all_chunks]
+
+    return context_text, chunk_ids
+
 
 HOURS_RE_DESCRIPTIONS = {
     "0-5": "Less than 5h/week (PASSIVE — REIT or fully managed property)",
@@ -15,13 +55,9 @@ HOURS_RE_DESCRIPTIONS = {
 }
 
 
-def build_prompt(user, mortgage_loan: dict) -> str:
+def build_prompt(user, mortgage_loan: dict, rag_context: str = "") -> str:
     """
-    Builds prompt for real estate agent.
-
-    Args:
-        user: UserInput
-        mortgage_loan: 30-year mortgage offer (NOT personal loan!)
+    Builds prompt for real estate agent (with RAG context).
     """
     total_capital = user.financial.savings
 
@@ -41,12 +77,10 @@ def build_prompt(user, mortgage_loan: dict) -> str:
         "Unknown availability"
     )
 
-    # California-specific data
     region = user.location.region
     region_data = REGION_DATA[region]
     city_data = get_city_real_estate_data(user.location.city, region)
 
-    # Mortgage details
     mortgage_amount = mortgage_loan.get("max_loan_amount", 0)
     mortgage_rate = mortgage_loan.get("interest_rate", 0)
     mortgage_rate_pct = mortgage_rate * 100
@@ -55,7 +89,6 @@ def build_prompt(user, mortgage_loan: dict) -> str:
     mortgage_total_paid = mortgage_loan.get("total_paid", 0)
     mortgage_total_interest = mortgage_loan.get("total_interest", 0)
 
-    # Calculate down payment thresholds
     median_price = region_data["median_home_price"]
     down_20pct = median_price * 0.20
 
@@ -97,6 +130,8 @@ PREFERENCES:
 - Rental yield average: {city_data['rental_yield_avg'] * 100:.1f}%
 - Risk factors: {region_data['risk_factors']}
 - Required down payment for median (20%): ${down_20pct:,.0f}
+
+{rag_context}
 
 ═══════════════════════════════════════════════════════════
 🏛️ CALIFORNIA-SPECIFIC RULES (CRITICAL):
@@ -232,13 +267,24 @@ FORMAT:
 """
 
 
-async def generate_real_estate_strategy_llm(user, mortgage_loan: dict) -> dict:
-    prompt = build_prompt(user, mortgage_loan)
+async def generate_real_estate_strategy_llm(user, mortgage_loan: dict) -> tuple[dict, list]:
+    """
+    Generates real estate strategy with RAG context.
+    Returns: (llm_response, rag_chunk_ids)
+    """
+    # ⭐ Step 1: Retrieve California real estate knowledge
+    rag_context, rag_chunk_ids = _build_rag_context_re(user)
 
-    return await call_llm_with_retry(
+    # Step 2: Build prompt with RAG context injected
+    prompt = build_prompt(user, mortgage_loan, rag_context=rag_context)
+
+    # Step 3: LLM call
+    response = await call_llm_with_retry(
         llm_call=lambda: call_llm(prompt),
         agent_name="real_estate"
     )
+
+    return response, rag_chunk_ids
 
 
 def validate_real_estate_output(data: dict) -> dict:
@@ -251,22 +297,18 @@ def validate_real_estate_output(data: dict) -> dict:
         type_value = "REIT"
 
     # ⭐ BUG #5 FIX: REIT realistic risk/stability calibration
-    # REIT volatility is similar to S&P 500 (beta 0.85-1.1)
-    # Direct property (rental/flip) has more stability due to physical asset
     if type_value == "REIT":
-        # REIT: trades like stocks, moderate volatility
-        default_risk = 0.40         # was 0.20 — REIT has real stock-like volatility
-        default_stability = 0.70    # was 0.85 — REIT can drop 20-40% in bear market
+        default_risk = 0.40
+        default_stability = 0.70
         risk_min, risk_max = 0.30, 0.65
         stab_min, stab_max = 0.50, 0.80
     else:
-        # Direct property (rental, flip): real physical asset
         default_risk = 0.30
         default_stability = 0.80
         risk_min, risk_max = 0.20, 0.70
         stab_min, stab_max = 0.60, 0.90
 
-    # ⭐ BUG #7 FIX: Round all numeric values to avoid float precision artifacts
+    # ⭐ BUG #7 FIX: Round all numeric values
     raw_return = data.get("expected_return")
     expected_return = round(clamp(raw_return, 0.01, 0.12, 0.05), 4)
 
@@ -301,5 +343,9 @@ def validate_real_estate_output(data: dict) -> dict:
 
 
 async def run_real_estate_agent(user, mortgage_loan: dict) -> dict:
-    raw = await generate_real_estate_strategy_llm(user, mortgage_loan)
-    return validate_real_estate_output(raw)
+    """Real estate agent with mortgage + RAG context."""
+    # ⭐ FIX: generate_real_estate_strategy_llm returns tuple
+    raw, rag_chunk_ids = await generate_real_estate_strategy_llm(user, mortgage_loan)
+    result = validate_real_estate_output(raw)
+    result["rag_sources"] = rag_chunk_ids  # ⭐ Transparency
+    return result

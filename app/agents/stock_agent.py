@@ -6,6 +6,49 @@ from app.agents._common import (
 )
 from app.agents._tools import STOCK_TOOLS
 from app.core.california_config import REGION_DATA
+from app.rag.retriever import retrieve  # ⭐ RAG retriever
+
+
+# ─────────────────────────────────
+# 📚 RAG CONTEXT BUILDER
+# ─────────────────────────────────
+def _build_rag_context_stock(user) -> tuple[str, list]:
+    """
+    Retrieves California investing/stock knowledge based on user profile.
+    """
+    region = user.location.region.value
+    risk_profile = user.preferences.risk_profile.value
+    horizon = user.preferences.horizon.value
+
+    equity = ""
+    if user.professional.equity_compensation:
+        equity = user.professional.equity_compensation.value
+
+    primary_query = f"California {region} investing stock ETF {risk_profile} {equity}"
+    secondary_query = "California tax Roth IRA QSBS capital gains muni bonds"
+
+    investing_chunks = retrieve(primary_query, top_k=2, category_filter="investing")
+    tax_chunks = retrieve(secondary_query, top_k=1, category_filter="tax")
+
+    all_chunks = investing_chunks + tax_chunks
+
+    if not all_chunks:
+        return "", []
+
+    context_parts = ["📚 RELEVANT CALIFORNIA INVESTING KNOWLEDGE BASE:\n"]
+    for i, chunk in enumerate(all_chunks, 1):
+        context_parts.append(
+            f"\n═══ Knowledge {i}: {chunk['id']} "
+            f"(relevance: {chunk['similarity_score'] * 100:.0f}%) ═══\n"
+            f"Category: {chunk['category']} | Sources: {chunk.get('sources', 'N/A')}\n\n"
+            f"{chunk['content'][:800]}\n"
+        )
+
+    context_text = "\n".join(context_parts)
+    chunk_ids = [c['id'] for c in all_chunks]
+
+    return context_text, chunk_ids
+
 
 HOURS_STOCK_DESCRIPTIONS = {
     "0-5": "Less than 5h/week (PASSIVE — set-and-forget ETFs only)",
@@ -38,13 +81,10 @@ def _build_qsbs_note(user) -> str:
 # 📊 STOCK CASH AGENT — Conservative, uses savings only
 # ═══════════════════════════════════════════════════════════
 
-def build_prompt_cash(user) -> str:
+def build_prompt_cash(user, rag_context: str = "") -> str:
     """
-    Cash-only stock portfolio.
-    Uses user's risk_profile directly (no leverage amplification).
+    Cash-only stock portfolio with RAG context.
     """
-    total_capital = user.financial.savings  # cash only — NO LOAN
-
     hours_desc = HOURS_STOCK_DESCRIPTIONS.get(
         user.professional.weekly_hours.value,
         "Unknown availability"
@@ -79,6 +119,8 @@ PREFERENCES:
 - Tax-advantaged accounts (401k, Roth IRA, HSA) crucial for CA residents
 - California municipal bonds: DOUBLE tax-free (federal + state)
 {qsbs_note}
+
+{rag_context}
 
 ═══════════════════════════════════════════════════════════
 🛠️ MANDATORY WORKFLOW (DO NOT SKIP):
@@ -145,13 +187,18 @@ FORMAT:
 """
 
 
-async def generate_stock_cash_strategy_llm(user) -> dict:
-    prompt = build_prompt_cash(user)
-    return await call_llm_with_tools(
+async def generate_stock_cash_strategy_llm(user) -> tuple[dict, list]:
+    """Generates stock cash strategy with RAG context."""
+    rag_context, rag_chunk_ids = _build_rag_context_stock(user)
+
+    prompt = build_prompt_cash(user, rag_context=rag_context)
+    response = await call_llm_with_tools(
         prompt=prompt,
         tools=STOCK_TOOLS,
         agent_name="stock_cash"
     )
+
+    return response, rag_chunk_ids
 
 
 def validate_stock_cash_output(data: dict) -> dict:
@@ -168,9 +215,9 @@ def validate_stock_cash_output(data: dict) -> dict:
             "BND": "20%",
             "Cash reserve": "10%",
         }),
-        "expected_return": clamp(data.get("expected_return"), 0.01, 0.15, 0.07),
-        "risk": clamp(data.get("risk"), 0, 1, 0.5),
-        "stability": clamp(data.get("stability"), 0, 1, 0.6),
+        "expected_return": round(clamp(data.get("expected_return"), 0.01, 0.15, 0.07), 4),
+        "risk": round(clamp(data.get("risk"), 0, 1, 0.5), 4),
+        "stability": round(clamp(data.get("stability"), 0, 1, 0.6), 4),
         "pros": safe_list(data.get("pros"), []),
         "cons": safe_list(data.get("cons"), []),
         "next_steps": safe_list(data.get("next_steps"), []),
@@ -179,29 +226,28 @@ def validate_stock_cash_output(data: dict) -> dict:
 
 
 async def run_stock_agent_cash(user) -> dict:
-    """Cash-funded stock portfolio (no loan, no leverage)."""
-    raw = await generate_stock_cash_strategy_llm(user)
-    return validate_stock_cash_output(raw)
+    """Cash-funded stock portfolio with RAG context."""
+    # ⭐ FIX: generate_stock_cash_strategy_llm returns tuple
+    raw, rag_chunk_ids = await generate_stock_cash_strategy_llm(user)
+    result = validate_stock_cash_output(raw)
+    result["rag_sources"] = rag_chunk_ids  # ⭐ Transparency
+    return result
 
 
 # ═══════════════════════════════════════════════════════════
 # 📈 STOCK MARGIN AGENT — Leveraged, uses margin loan
 # ═══════════════════════════════════════════════════════════
 
-# ⭐ Margin agent uses MORE AGGRESSIVE allocation
-# We bump risk_profile one level up (low→medium, medium→high)
-# because margin investing IS inherently leveraged risk
 MARGIN_RISK_AMPLIFIER = {
-    "low": "medium",  # Conservative + margin = medium effective risk
-    "medium": "high",  # Medium + margin = high effective risk
-    "high": "high",  # Already aggressive
+    "low": "medium",
+    "medium": "high",
+    "high": "high",
 }
 
 
-def build_prompt_margin(user, margin_loan: dict) -> str:
+def build_prompt_margin(user, margin_loan: dict, rag_context: str = "") -> str:
     """
-    Leveraged stock portfolio using margin loan.
-    Bumps risk_profile one level up for allocation tool (margin amplifies risk).
+    Leveraged stock portfolio using margin loan + RAG context.
     """
     total_capital = user.financial.savings
     if margin_loan.get("approved"):
@@ -215,17 +261,14 @@ def build_prompt_margin(user, margin_loan: dict) -> str:
     region_data = REGION_DATA[user.location.region]
     qsbs_note = _build_qsbs_note(user)
 
-    # ⭐ Margin amplifies risk — use bumped profile for allocation
     user_risk = user.preferences.risk_profile.value
     effective_risk_profile = MARGIN_RISK_AMPLIFIER.get(user_risk, "medium")
 
-    # Margin loan details
     margin_amount = margin_loan.get("max_loan_amount", 0)
     margin_rate = margin_loan.get("interest_rate", 0)
     margin_rate_pct = margin_rate * 100
     margin_monthly = margin_loan.get("monthly_payment", 0)
 
-    # Warning based on user profile
     risk_warning = ""
     if user_risk == "low":
         risk_warning = "\n🚨 CRITICAL WARNING: User selected LOW risk tolerance. Margin investing is GENERALLY INAPPROPRIATE. Emphasize this in cons. Suggest cash strategy instead."
@@ -266,7 +309,6 @@ USER PROFILE:
 PREFERENCES:
 - User-stated risk tolerance: {user_risk}
 - ⭐ Effective risk for allocation (with leverage): {effective_risk_profile}
-  (margin amplifies risk — we use one level up for allocation)
 - Investment horizon: {user.preferences.horizon.value} years
 {risk_warning}
 
@@ -274,6 +316,8 @@ PREFERENCES:
 - California treats capital gains as ORDINARY INCOME (up to 13.3% state)
 - ⭐ Investment interest expense on margin loan MAY be tax-deductible (consult CPA)
 {qsbs_note}
+
+{rag_context}
 
 ═══════════════════════════════════════════════════════════
 🛠️ MANDATORY WORKFLOW (DO NOT SKIP):
@@ -300,26 +344,22 @@ Generate a MARGIN-LEVERAGED portfolio strategy that:
 - If user has LOW risk tolerance: cons MUST explicitly say "margin is inappropriate for low-risk investors"
 
 REQUIRED FIELDS:
-1. title — short portfolio name (e.g., "Leveraged California Growth Portfolio")
-2. description — leveraged strategy (2-3 sentences, mention {round(total_capital / max(user.financial.savings, 1), 1)}x leverage)
-3. allocation — EXACTLY from calculate_stock_allocation tool
-4. expected_return — EXACTLY from calculate_expected_return tool
-5. risk — EXACTLY from calculate_expected_return tool (min 0.6 for margin)
-6. stability — EXACTLY from calculate_expected_return tool (max 0.6 for margin)
-7. pros — 3 advantages (amplified returns if market goes up)
-8. cons — MUST INCLUDE: 
-   - "Margin call risk if market drops 20%+"
-   - "Variable interest rate can rise"
-   - At least one more
-9. next_steps — 3 concrete actions (open margin account, understand maintenance margin)
+1. title — short portfolio name
+2. description — leveraged strategy (mention {round(total_capital / max(user.financial.savings, 1), 1)}x leverage)
+3. allocation — EXACTLY from tool
+4. expected_return — EXACTLY from tool
+5. risk — EXACTLY from tool (min 0.6 for margin)
+6. stability — EXACTLY from tool (max 0.6 for margin)
+7. pros — 3 advantages
+8. cons — MUST INCLUDE margin call + variable rate + 1 more
+9. next_steps — 3 concrete actions
 10. time_to_profit — realistic horizon
 
 STRICT RULES:
 - Return ONLY valid JSON, no markdown fences
-- DO NOT change tool-provided numbers
 - "agent" field MUST be "stock_margin"
-- risk MUST be ≥ 0.6 (margin is inherently risky)
-- stability MUST be ≤ 0.6 (margin is volatile)
+- risk MUST be ≥ 0.6
+- stability MUST be ≤ 0.6
 
 FORMAT:
 {{
@@ -342,13 +382,18 @@ FORMAT:
 """
 
 
-async def generate_stock_margin_strategy_llm(user, margin_loan: dict) -> dict:
-    prompt = build_prompt_margin(user, margin_loan)
-    return await call_llm_with_tools(
+async def generate_stock_margin_strategy_llm(user, margin_loan: dict) -> tuple[dict, list]:
+    """Generates stock margin strategy with RAG context."""
+    rag_context, rag_chunk_ids = _build_rag_context_stock(user)
+
+    prompt = build_prompt_margin(user, margin_loan, rag_context=rag_context)
+    response = await call_llm_with_tools(
         prompt=prompt,
         tools=STOCK_TOOLS,
         agent_name="stock_margin"
     )
+
+    return response, rag_chunk_ids
 
 
 def validate_stock_margin_output(data: dict) -> dict:
@@ -365,10 +410,9 @@ def validate_stock_margin_output(data: dict) -> dict:
             "VXUS": "20%",
             "Cash reserve": "5%",
         }),
-        "expected_return": clamp(data.get("expected_return"), 0.01, 0.18, 0.09),
-        # ⭐ Margin: force risk min 0.6, stability max 0.6
-        "risk": clamp(data.get("risk"), 0.6, 1, 0.7),
-        "stability": clamp(data.get("stability"), 0, 0.6, 0.5),
+        "expected_return": round(clamp(data.get("expected_return"), 0.01, 0.18, 0.09), 4),
+        "risk": round(clamp(data.get("risk"), 0.6, 1, 0.7), 4),
+        "stability": round(clamp(data.get("stability"), 0, 0.6, 0.5), 4),
         "pros": safe_list(data.get("pros"), []),
         "cons": safe_list(data.get("cons"), [
             "Margin call risk if portfolio drops 20%+",
@@ -380,39 +424,36 @@ def validate_stock_margin_output(data: dict) -> dict:
 
 
 async def run_stock_agent_margin(user, margin_loan: dict) -> dict:
-    """Margin-leveraged stock portfolio (uses broker margin loan)."""
-    raw = await generate_stock_margin_strategy_llm(user, margin_loan)
-    return validate_stock_margin_output(raw)
+    """Margin-leveraged stock portfolio with RAG context."""
+    # ⭐ FIX: generate_stock_margin_strategy_llm returns tuple
+    raw, rag_chunk_ids = await generate_stock_margin_strategy_llm(user, margin_loan)
+    result = validate_stock_margin_output(raw)
+    result["rag_sources"] = rag_chunk_ids  # ⭐ Transparency
+    return result
 
 
 # ═══════════════════════════════════════════════════════════
 # 🔄 LEGACY COMPATIBILITY
-# Keeps old `run_stock_agent(user, loan)` working if anything still calls it
 # ═══════════════════════════════════════════════════════════
 
 async def run_stock_agent(user, loan: dict = None) -> dict:
-    """
-    Legacy entry point — defaults to cash strategy.
-    Kept for backward compatibility with code that may still call run_stock_agent.
-    """
+    """Legacy entry point — defaults to cash strategy."""
     return await run_stock_agent_cash(user)
 
 
-# Legacy prompt function name (in case anything imports it)
 def build_prompt(user, loan: dict) -> str:
     """Legacy: defaults to cash prompt."""
     return build_prompt_cash(user)
 
 
-# Legacy validation name
 def validate_stock_output(data: dict) -> dict:
-    """Legacy: defaults to cash validation, normalizes agent field to 'stock'."""
+    """Legacy: defaults to cash validation."""
     result = validate_stock_cash_output(data)
-    result["agent"] = "stock"  # Legacy normalization
+    result["agent"] = "stock"
     return result
 
 
-# Legacy generate function
 async def generate_stock_strategy_llm(user, loan: dict) -> dict:
-    """Legacy: defaults to cash generation."""
-    return await generate_stock_cash_strategy_llm(user)
+    """Legacy: defaults to cash generation. Returns only response (not tuple)."""
+    response, _ = await generate_stock_cash_strategy_llm(user)
+    return response
