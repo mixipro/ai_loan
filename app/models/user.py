@@ -1,4 +1,14 @@
 # app/models/user.py
+"""
+User input models for CaliforniaCFO.
+
+v4.1 Changes:
+  - Profession is now plain `str` (not Enum) — supports 436 California-focused
+    professions from app.core.profession_catalog without enum limitations
+  - CaliforniaSector aligned with frontend values (no " & Media" suffix etc.)
+  - City validator softened (warning instead of error if not in catalog)
+  - Removed unused Profession enum (replaced by profession_catalog)
+"""
 
 from pydantic import BaseModel, Field, model_validator
 from typing import List, Optional
@@ -8,11 +18,11 @@ from app.core.california_config import (
     get_cities_for_region, find_region_for_city
 )
 
+
 # ─────────────────────────────────────────
 # 🌴 CALIFORNIA LOCATION
 # ─────────────────────────────────────────
 
-# Cities by region (automatski iz california_config)
 CITIES_BY_REGION: dict[str, list[str]] = {
     region.value: data["cities"]
     for region, data in REGION_DATA.items()
@@ -20,33 +30,45 @@ CITIES_BY_REGION: dict[str, list[str]] = {
 
 
 class LocationInfo(BaseModel):
+    """Region + city. City must be non-empty string (validated against catalog softly)."""
     region: CaliforniaRegion
-    city: str
+    city: str = Field(..., min_length=1, description="City name within the selected region")
 
     @model_validator(mode="after")
-    def city_must_be_valid(self) -> "LocationInfo":
+    def city_should_be_in_region(self) -> "LocationInfo":
+        """
+        Soft validation: if city is in CITIES_BY_REGION catalog, ensure it matches the region.
+        If city is custom (not in catalog), accept it (user knows their own city).
+        """
         valid_cities = get_cities_for_region(self.region)
-        if self.city not in valid_cities:
+        all_cities = set()
+        for cities in CITIES_BY_REGION.values():
+            all_cities.update(cities)
+
+        # If city is in catalog but in WRONG region → reject (mismatch)
+        if self.city in all_cities and self.city not in valid_cities:
+            actual_region = find_region_for_city(self.city)
             raise ValueError(
-                f"'{self.city}' is not a valid city for {self.region.value}. "
-                f"Available cities: {valid_cities}"
+                f"'{self.city}' belongs to {actual_region.value if actual_region else 'unknown region'}, "
+                f"not {self.region.value}. Pick a city from: {valid_cities[:5]}..."
             )
+        # If city is unknown (custom) → accept silently
         return self
 
 
 # ─────────────────────────────────────────
-# 💰 FINANCIAL (USD only)
+# 💰 FINANCIAL
 # ─────────────────────────────────────────
 
 class Currency(str, Enum):
-    USD = "USD"  # California-only system = USD only
+    USD = "USD"
 
 
 class FinancialInfo(BaseModel):
     income: int = Field(..., gt=0, description="Monthly income (USD)")
     expenses: int = Field(..., ge=0, description="Monthly expenses (USD)")
     monthly_debt: int = Field(..., ge=0, description="Monthly debt payment (USD)")
-    savings: int = Field(..., ge=0, description="Total savings (USD)")
+    savings: int = Field(..., ge=0, le=10_000_000, description="Total savings (USD, max $10M)")
     currency: Currency = Field(default=Currency.USD)
 
     @model_validator(mode="after")
@@ -57,238 +79,29 @@ class FinancialInfo(BaseModel):
 
 
 # ─────────────────────────────────────────
-# 💼 PROFESSIONAL — CALIFORNIA-SPECIFIC
+# 💼 PROFESSIONAL — CALIFORNIA SECTORS
+# Aligned with frontend dropdown values (12 sectors)
 # ─────────────────────────────────────────
 
 class CaliforniaSector(str, Enum):
-    # California-flagship industries
+    """California-specific industry sectors. Values match frontend dropdown."""
     TECHNOLOGY = "Technology"
+    ENTERTAINMENT = "Entertainment"
     BIOTECHNOLOGY = "Biotechnology"
-    ENTERTAINMENT = "Entertainment & Media"
-    AGRICULTURE = "Agriculture"
-    TOURISM = "Tourism & Hospitality"
-
-    # Major California industries
-    AEROSPACE = "Aerospace & Defense"
-    FINANCE = "Finance & Banking"
     HEALTHCARE = "Healthcare"
-    REAL_ESTATE = "Real Estate"
-    GOVERNMENT = "Government & Public Sector"
+    AGRICULTURE = "Agriculture"
+    GOVERNMENT = "Government"
+    FINANCE = "Finance"
     EDUCATION = "Education"
-
-    # Standard sectors (preserved from original)
-    LAW_ADMIN = "Law & Administration"
-    CONSTRUCTION_INDUSTRY = "Construction & Industry"
-    TRADE_SERVICES = "Trade & Services"
-    ARTS = "Arts & Crafts"
-    TRANSPORTATION = "Transportation"
-    ENERGY = "Energy"
-    MEDIA_COMMUNICATIONS = "Media & Communications"
-    SCIENCE_RESEARCH = "Science & Research"
-
-    # Niche California
-    WINE_INDUSTRY = "Wine & Spirits"
-    CANNABIS = "Cannabis Industry"
-    VENTURE_CAPITAL = "Venture Capital"
-
+    TOURISM = "Tourism"
+    MANUFACTURING = "Manufacturing"
+    RETAIL = "Retail"
     OTHER = "Other"
 
 
-# Keep existing Profession enum (150+ professions - too valuable to lose)
-class Profession(str, Enum):
-    # TECHNOLOGY
-    SOFTWARE_ENGINEER = "Software Engineer"
-    BACKEND_DEVELOPER = "Backend Developer"
-    FRONTEND_DEVELOPER = "Frontend Developer"
-    FULLSTACK_DEVELOPER = "Full Stack Developer"
-    DATA_SCIENTIST = "Data Scientist"
-    MACHINE_LEARNING_ENGINEER = "Machine Learning Engineer"
-    AI_ENGINEER = "AI Engineer"
-    DEVOPS_ENGINEER = "DevOps Engineer"
-    CLOUD_ENGINEER = "Cloud Engineer"
-    CYBERSECURITY_ANALYST = "Cybersecurity Analyst"
-    NETWORK_ENGINEER = "Network Engineer"
-    QA_ENGINEER = "QA Engineer"
-    MOBILE_APP_DEVELOPER = "Mobile App Developer"
-    GAME_DEVELOPER = "Game Developer"
-    EMBEDDED_SYSTEMS_ENGINEER = "Embedded Systems Engineer"
-
-    # FINANCE
-    ACCOUNTANT = "Accountant"
-    FINANCIAL_ANALYST = "Financial Analyst"
-    INVESTMENT_BANKER = "Investment Banker"
-    AUDITOR = "Auditor"
-    TAX_CONSULTANT = "Tax Consultant"
-    RISK_MANAGER = "Risk Manager"
-    PORTFOLIO_MANAGER = "Portfolio Manager"
-    FINANCIAL_PLANNER = "Financial Planner"
-    CREDIT_ANALYST = "Credit Analyst"
-    INSURANCE_UNDERWRITER = "Insurance Underwriter"
-
-    # HEALTHCARE
-    GENERAL_PRACTITIONER = "General Practitioner"
-    SURGEON = "Surgeon"
-    NURSE = "Nurse"
-    PHARMACIST = "Pharmacist"
-    DENTIST = "Dentist"
-    PHYSIOTHERAPIST = "Physiotherapist"
-    RADIOLOGIST = "Radiologist"
-    PSYCHOLOGIST = "Psychologist"
-    PSYCHIATRIST = "Psychiatrist"
-    MEDICAL_LAB_TECHNICIAN = "Medical Lab Technician"
-
-    # EDUCATION
-    TEACHER = "Teacher"
-    UNIVERSITY_PROFESSOR = "University Professor"
-    TEACHING_ASSISTANT = "Teaching Assistant"
-    SCHOOL_COUNSELOR = "School Counselor"
-    EDUCATIONAL_CONSULTANT = "Educational Consultant"
-    INSTRUCTIONAL_DESIGNER = "Instructional Designer"
-    ONLINE_TUTOR = "Online Tutor"
-    CURRICULUM_DEVELOPER = "Curriculum Developer"
-
-    # LAW & ADMIN
-    LAWYER = "Lawyer"
-    LEGAL_ADVISOR = "Legal Advisor"
-    PARALEGAL = "Paralegal"
-    JUDGE = "Judge"
-    PUBLIC_ADMINISTRATOR = "Public Administrator"
-    HR_MANAGER = "HR Manager"
-    OFFICE_MANAGER = "Office Manager"
-    COMPLIANCE_OFFICER = "Compliance Officer"
-
-    # CONSTRUCTION & INDUSTRY
-    CIVIL_ENGINEER = "Civil Engineer"
-    ARCHITECT = "Architect"
-    MECHANICAL_ENGINEER = "Mechanical Engineer"
-    ELECTRICAL_ENGINEER = "Electrical Engineer"
-    CONSTRUCTION_MANAGER = "Construction Manager"
-    SURVEYOR = "Surveyor"
-    WELDER = "Welder"
-    INDUSTRIAL_ENGINEER = "Industrial Engineer"
-
-    # TRADE & SERVICES
-    SALES_MANAGER = "Sales Manager"
-    RETAIL_WORKER = "Retail Worker"
-    CUSTOMER_SUPPORT_SPECIALIST = "Customer Support Specialist"
-    MARKETING_SPECIALIST = "Marketing Specialist"
-    DIGITAL_MARKETER = "Digital Marketer"
-    BUSINESS_ANALYST = "Business Analyst"
-    PRODUCT_MANAGER = "Product Manager"
-    ACCOUNT_MANAGER = "Account Manager"
-
-    # ARTS & ENTERTAINMENT (heavy in California!)
-    GRAPHIC_DESIGNER = "Graphic Designer"
-    UX_UI_DESIGNER = "UX/UI Designer"
-    PHOTOGRAPHER = "Photographer"
-    VIDEO_EDITOR = "Video Editor"
-    ANIMATOR = "Animator"
-    MUSICIAN = "Musician"
-    ACTOR = "Actor"
-    FILM_DIRECTOR = "Film Director"
-    SCREENWRITER = "Screenwriter"  # ⭐ ADDED for LA
-    PRODUCER = "Producer"  # ⭐ ADDED for LA
-    EDITOR = "Editor"  # ⭐ ADDED for LA
-
-    # AGRICULTURE (Central Valley!)
-    FARMER = "Farmer"
-    AGRONOMIST = "Agronomist"
-    VETERINARIAN = "Veterinarian"
-    AGRICULTURAL_TECHNICIAN = "Agricultural Technician"
-    GREENHOUSE_WORKER = "Greenhouse Worker"
-    WINEMAKER = "Winemaker"  # ⭐ ADDED for Central Coast
-    VINEYARD_MANAGER = "Vineyard Manager"  # ⭐ ADDED
-
-    # TRANSPORTATION
-    TRUCK_DRIVER = "Truck Driver"
-    DELIVERY_DRIVER = "Delivery Driver"
-    PILOT = "Pilot"
-    FLIGHT_ATTENDANT = "Flight Attendant"
-    LOGISTICS_COORDINATOR = "Logistics Coordinator"
-    WAREHOUSE_MANAGER = "Warehouse Manager"
-    SHIP_CAPTAIN = "Ship Captain"
-
-    # ENERGY
-    ENERGY_ENGINEER = "Energy Engineer"
-    SOLAR_TECHNICIAN = "Solar Technician"
-    WIND_TURBINE_TECHNICIAN = "Wind Turbine Technician"
-    OIL_GAS_ENGINEER = "Oil & Gas Engineer"
-    POWER_PLANT_OPERATOR = "Power Plant Operator"
-
-    # REAL ESTATE
-    REAL_ESTATE_AGENT = "Real Estate Agent"
-    PROPERTY_MANAGER = "Property Manager"
-    REAL_ESTATE_BROKER = "Real Estate Broker"
-    REAL_ESTATE_INVESTOR = "Real Estate Investor"
-
-    # MEDIA
-    JOURNALIST = "Journalist"
-    NEWS_ANCHOR = "News Anchor"
-    CONTENT_CREATOR = "Content Creator"
-    COPYWRITER = "Copywriter"
-    SOCIAL_MEDIA_MANAGER = "Social Media Manager"
-
-    # SCIENCE (biotech in San Diego!)
-    RESEARCH_SCIENTIST = "Research Scientist"
-    BIOLOGIST = "Biologist"
-    CHEMIST = "Chemist"
-    PHYSICIST = "Physicist"
-    DATA_ANALYST = "Data Analyst"
-    BIOTECH_RESEARCHER = "Biotech Researcher"  # ⭐ ADDED for San Diego
-    CLINICAL_RESEARCHER = "Clinical Researcher"  # ⭐ ADDED
-
-    # OTHER
-    ELECTRICIAN = "Electrician"
-    PLUMBER = "Plumber"
-    CHEF = "Chef"
-    FITNESS_TRAINER = "Fitness Trainer"
-    HAIRDRESSER = "Hairdresser"
-
-    # EXTRA
-    SCRUM_MASTER = "Scrum Master"
-    BLOCKCHAIN_DEVELOPER = "Blockchain Developer"
-    ETHICAL_HACKER = "Ethical Hacker"
-    QUANTITATIVE_ANALYST = "Quantitative Analyst"
-    ACTUARY = "Actuary"
-    OCCUPATIONAL_THERAPIST = "Occupational Therapist"
-    SPEECH_THERAPIST = "Speech Therapist"
-    SPECIAL_EDUCATION_TEACHER = "Special Education Teacher"
-    PROSECUTOR = "Prosecutor"
-    NOTARY = "Notary"
-    URBAN_PLANNER = "Urban Planner"
-    SAFETY_ENGINEER = "Safety Engineer"
-    PROCUREMENT_MANAGER = "Procurement Manager"
-    SUPPLY_CHAIN_ANALYST = "Supply Chain Analyst"
-    EVENT_MANAGER = "Event Manager"
-    INTERIOR_DESIGNER = "Interior Designer"
-    FASHION_DESIGNER = "Fashion Designer"
-    SOUND_ENGINEER = "Sound Engineer"
-    GAME_DESIGNER = "Game Designer"
-    FORESTRY_ENGINEER = "Forestry Engineer"
-    FISHERIES_SPECIALIST = "Fisheries Specialist"
-    TRAIN_OPERATOR = "Train Operator"
-    AIR_TRAFFIC_CONTROLLER = "Air Traffic Controller"
-    RENEWABLE_ENERGY_ANALYST = "Renewable Energy Analyst"
-    FACILITY_MANAGER = "Facility Manager"
-    PR_MANAGER = "PR Manager"
-    TECHNICAL_WRITER = "Technical Writer"
-    STATISTICIAN = "Statistician"
-    ECONOMIST = "Economist"
-    MATHEMATICIAN = "Mathematician"
-    SECURITY_GUARD = "Security Guard"
-    FIREFIGHTER = "Firefighter"
-    POLICE_OFFICER = "Police Officer"
-    TRANSLATOR = "Translator"
-    INTERPRETER = "Interpreter"
-    LIBRARIAN = "Librarian"
-    ARCHIVIST = "Archivist"
-    TOUR_GUIDE = "Tour Guide"
-    BARTENDER = "Bartender"
-
-    # ⭐ NEW California-specific
-    STARTUP_FOUNDER = "Startup Founder"
-    VC_ANALYST = "Venture Capital Analyst"
-    BUDTENDER = "Budtender (Cannabis)"
+# NOTE: Profession is now plain `str`, not Enum.
+# 436 California-focused professions are catalogued in app/core/profession_catalog.py
+# and exposed via /options endpoint for the frontend dropdown.
 
 
 class EmploymentStatus(str, Enum):
@@ -315,7 +128,10 @@ class RiskProfile(str, Enum):
         }[self]
 
 
-# ⭐ NEW: California-specific professional fields (all optional)
+# ─────────────────────────────────────────
+# 🌴 CALIFORNIA-SPECIFIC PROFESSIONAL FIELDS (optional)
+# Used for Tech / Entertainment sectors
+# ─────────────────────────────────────────
 
 class TechRole(str, Enum):
     SOFTWARE_ENGINEER = "Software Engineer"
@@ -366,8 +182,15 @@ class EntertainmentRole(str, Enum):
 
 
 # ─────────────────────────────────────────
-# ⚙️ PREFERENCES
+# ⏰ WEEKLY HOURS & HORIZON
 # ─────────────────────────────────────────
+
+class WeeklyHours(str, Enum):
+    MINIMAL = "0-5"
+    LIGHT = "5-15"
+    MODERATE = "15-30"
+    HEAVY = "30+"
+
 
 class HorizonGroup(str, Enum):
     SHORT = "1-3"
@@ -381,18 +204,10 @@ class Preferences(BaseModel):
     horizon: HorizonGroup
 
 
-# ─────────────────────────
-# ⏰ WEEKLY HOURS AVAILABLE
-# ─────────────────────────
+# ─────────────────────────────────────────
+# 🎯 PREDEFINED INTERESTS (50 options)
+# ─────────────────────────────────────────
 
-class WeeklyHours(str, Enum):
-    MINIMAL = "0-5"
-    LIGHT = "5-15"
-    MODERATE = "15-30"
-    HEAVY = "30+"
-
-
-# 🎯 PREDEFINED INTERESTS (50)
 PREDEFINED_INTERESTS = [
     # Sport & fitness
     "fitness", "yoga", "running", "cycling", "swimming",
@@ -403,13 +218,14 @@ PREDEFINED_INTERESTS = [
 
     # Tech & gaming
     "programming", "ai/ml", "gaming", "blockchain", "robotics",
+    "technology", "startups",
 
     # Creative
     "photography", "videography", "music", "writing", "drawing",
-    "design", "fashion", "interior design", "crafts",
+    "design", "fashion", "interior design", "crafts", "art",
 
     # Business & finance
-    "investing", "real estate", "startups", "crypto", "trading",
+    "investing", "real estate", "crypto", "trading",
 
     # Travel & lifestyle
     "travel", "languages", "history", "cultures", "outdoor adventure",
@@ -423,55 +239,68 @@ PREDEFINED_INTERESTS = [
 ]
 
 
+# ─────────────────────────────────────────
+# 💼 PROFESSIONAL INFO
+# ─────────────────────────────────────────
+
 class ProfessionalInfo(BaseModel):
+    """
+    Professional profile. Sector is enum (12 values), profession is plain string
+    (validated only as non-empty — frontend ensures it comes from PROFESSIONS_BY_SECTOR).
+    """
     sector: CaliforniaSector
-    profession: Profession
+    profession: str = Field(
+        ...,
+        min_length=1,
+        max_length=200,
+        description="Profession name (selected from sector-filtered catalog of 436 California professions)"
+    )
     employment_status: EmploymentStatus
 
     interests: List[str] = Field(
         default_factory=list,
-        description=f"List of interests. Predefined: {len(PREDEFINED_INTERESTS)}, custom allowed.",
+        description="User's hobbies and interests (max 4)",
         max_length=4
     )
     prior_experience: str = Field(
         default="",
-        description="Brief description of previous businesses/projects",
-        max_length=500
+        max_length=500,
+        description="Brief description of previous businesses/projects"
     )
     weekly_hours: WeeklyHours = Field(
         default=WeeklyHours.LIGHT,
-        description="Hours per week available for business"
+        description="Hours per week available for business/investment activity"
     )
 
-    # ⭐ NEW: California-specific optional fields
+    # California-specific optional fields
     tech_role: Optional[TechRole] = Field(
         default=None,
-        description="Specific tech role (if applicable, Bay Area focus)"
+        description="Specific tech role (Bay Area / Silicon Valley focus)"
     )
     equity_compensation: Optional[EquityCompensation] = Field(
         default=None,
-        description="Type of equity compensation received"
+        description="Type of equity compensation received (RSU, ISO, Founder, etc.)"
     )
     company_stage: Optional[CompanyStage] = Field(
         default=None,
-        description="Stage of current employer (especially for tech/biotech)"
+        description="Stage of current employer (especially for tech/biotech sectors)"
     )
     qsbs_eligible: Optional[bool] = Field(
         default=None,
-        description="Does your stock qualify for QSBS exclusion? (Section 1202)"
+        description="Stock qualifies for QSBS exclusion under Section 1202?"
     )
     entertainment_role: Optional[EntertainmentRole] = Field(
         default=None,
-        description="Entertainment industry role (LA-specific)"
+        description="Entertainment industry role (LA / Hollywood focus)"
     )
 
 
 # ─────────────────────────────────────────
-# 👤 PERSONAL
+# 👤 PERSONAL INFO
 # ─────────────────────────────────────────
 
 class PersonalInfo(BaseModel):
-    age: int = Field(..., gt=17, lt=120)
+    age: int = Field(..., gt=17, lt=120, description="Age (18-119)")
 
 
 # ─────────────────────────────────────────
@@ -479,6 +308,7 @@ class PersonalInfo(BaseModel):
 # ─────────────────────────────────────────
 
 class UserInput(BaseModel):
+    """Complete user profile submitted to /loan-offers and /analyze endpoints."""
     personal: PersonalInfo
     location: LocationInfo
     financial: FinancialInfo

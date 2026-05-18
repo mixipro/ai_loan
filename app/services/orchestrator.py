@@ -1,15 +1,31 @@
 # app/services/orchestrator.py
+"""
+Orchestrator — runs 3 strategy agents in parallel with user-specified config.
+
+NEW FLOW (v4.0):
+  1. User submits profile + per-strategy config (from /loan-offers slider UI)
+  2. Risk engine computes profile (for transparency / reporting)
+  3. Three agents run in parallel:
+     - business_agent(user, config.business)
+     - real_estate_agent(user, config.real_estate)
+     - stock_agent(user, config.stock)
+  4. Each agent uses its OWN loan_amount + savings_to_use from config
+  5. Investment engine computes net return per strategy
+  6. Judge agent selects best (skipping rejected strategies)
+
+REMOVED:
+  - 5-agent system (business + business_cash + RE + stock_cash + stock_margin)
+  - /simulate endpoint (replaced by config in /analyze)
+"""
 
 import asyncio
 import logging
 
 from app.engines.risk_engine import calculate_risk_score
-from app.engines.interest_engine import calculate_all_loan_rates, calculate_interest_rate
-from app.engines.loan_engine import calculate_all_strategy_loans, calculate_custom_loan
 from app.engines.investment_engine import get_best_investments
 
-from app.agents.stock_agent import run_stock_agent_cash, run_stock_agent_margin
-from app.agents.business_agent import run_business_agent, run_business_agent_cash  # ⭐ NEW import
+from app.agents.stock_agent import run_stock_agent
+from app.agents.business_agent import run_business_agent
 from app.agents.real_estate_agent import run_real_estate_agent
 from app.agents.judge_agent import run_judge_agent
 
@@ -17,31 +33,32 @@ logger = logging.getLogger(__name__)
 
 
 # ─────────────────────────
-# 🚀 RUN ALL AGENTS — PARALLEL (5 agents now!)
+# 🚀 RUN 3 AGENTS — PARALLEL
 # ─────────────────────────
-async def run_all_agents(user, strategy_loans: dict) -> list:
+async def run_all_agents(user, config: dict) -> list:
     """
-    Runs 5 agents in parallel via asyncio.gather.
-    Each agent gets its OWN loan type (business, mortgage, none, margin).
+    Runs 3 agents in parallel via asyncio.gather.
+    Each agent receives its OWN config from the /loan-offers slider UI.
 
-    ⭐ NEW: business_cash agent provides bootstrap alternative
+    Args:
+        user: UserInput
+        config: {
+            "business":    {loan_amount, loan_years, savings_to_use, interest_rate},
+            "real_estate": {loan_amount, loan_years, savings_to_use, interest_rate},
+            "stock":       {loan_amount, loan_years, savings_to_use, interest_rate}
+        }
     """
-    business_loan = strategy_loans["business"]
-    mortgage_loan = strategy_loans["real_estate"]
-    margin_loan = strategy_loans["stock_margin"]
+    business_config = config.get("business", {})
+    real_estate_config = config.get("real_estate", {})
+    stock_config = config.get("stock", {})
 
     agent_definitions = [
-        ("business", lambda: run_business_agent(user, business_loan)),
-        ("business_cash", lambda: run_business_agent_cash(user)),  # ⭐ NEW
-        ("real_estate", lambda: run_real_estate_agent(user, mortgage_loan)),
-        ("stock_cash", lambda: run_stock_agent_cash(user)),
-        ("stock_margin", lambda: run_stock_agent_margin(user, margin_loan)),
+        ("business", lambda: run_business_agent(user, business_config)),
+        ("real_estate", lambda: run_real_estate_agent(user, real_estate_config)),
+        ("stock", lambda: run_stock_agent(user, stock_config)),
     ]
 
-    logger.info(
-        "Launching 5 agents in parallel "
-        "(business, business_cash, real_estate, stock_cash, stock_margin)..."
-    )
+    logger.info("Launching 3 agents in parallel (business, real_estate, stock)...")
 
     tasks = [agent_fn() for _, agent_fn in agent_definitions]
     raw_results = await asyncio.gather(*tasks, return_exceptions=True)
@@ -63,16 +80,24 @@ async def run_all_agents(user, strategy_loans: dict) -> list:
                 "next_steps": [],
                 "time_to_profit": "N/A",
                 "error": str(result),
+                "rejected": True,
+                "rejection_reason": f"Agent execution error: {str(result)[:200]}",
             })
         else:
-            logger.info(f"Agent '{name}' completed successfully")
+            if result.get("rejected"):
+                logger.warning(
+                    f"Agent '{name}' REJECTED strategy: "
+                    f"{result.get('rejection_reason', 'unknown reason')}"
+                )
+            else:
+                logger.info(f"Agent '{name}' completed successfully")
             results.append(result)
 
     return results
 
 
 # ─────────────────────────
-# 📝 BUILD RISK EXPLANATION (unchanged)
+# 📝 BUILD RISK EXPLANATION
 # ─────────────────────────
 def build_risk_explanation(user_risk_pref: str, creditworthiness: str) -> str:
     base = (
@@ -97,20 +122,83 @@ def build_risk_explanation(user_risk_pref: str, creditworthiness: str) -> str:
 
 
 # ─────────────────────────
+# 🔧 BUILD STRATEGY LOAN OBJECT FROM CONFIG
+# (for investment_engine compatibility)
+# ─────────────────────────
+def _build_strategy_loans_from_config(config: dict) -> dict:
+    """
+    Converts user config into strategy_loans format expected by investment_engine.
+
+    Maintains the same shape that legacy investment_engine expects, so we don't
+    have to refactor it (just adapts our config to its input format).
+    """
+    def _to_loan_obj(strategy_config: dict, loan_type: str) -> dict:
+        loan_amount = strategy_config.get("loan_amount", 0)
+        loan_years = strategy_config.get("loan_years", 0)
+        rate = strategy_config.get("interest_rate", 0)
+
+        # Compute monthly_payment / annual_payment / total_paid using amortization
+        if loan_amount > 0 and rate > 0 and loan_years > 0:
+            months = loan_years * 12
+            monthly_rate = rate / 12
+            monthly_payment = (
+                loan_amount * monthly_rate * ((1 + monthly_rate) ** months) /
+                (((1 + monthly_rate) ** months) - 1)
+            )
+            annual_payment = monthly_payment * 12
+            total_paid = monthly_payment * months
+            total_interest = total_paid - loan_amount
+        else:
+            monthly_payment = 0
+            annual_payment = 0
+            total_paid = 0
+            total_interest = 0
+
+        return {
+            "approved": loan_amount > 0,
+            "max_loan_amount": loan_amount,
+            "loan_amount": loan_amount,
+            "interest_rate": rate,
+            "loan_years": loan_years,
+            "monthly_payment": round(monthly_payment, 2),
+            "annual_payment": round(annual_payment, 2),
+            "total_paid": round(total_paid, 2),
+            "total_interest": round(total_interest, 2),
+            "loan_type": loan_type,
+            "savings_to_use": strategy_config.get("savings_to_use", 0),
+        }
+
+    stock_loan = _to_loan_obj(config.get("stock", {}), "margin")
+    return {
+        "business": _to_loan_obj(config.get("business", {}), "business"),
+        "real_estate": _to_loan_obj(config.get("real_estate", {}), "mortgage"),
+        "stock_margin": stock_loan,
+        "stock": stock_loan,  # ⭐ Alias for new unified agent name
+    }
+
+
+# ─────────────────────────
 # 🚀 MAIN PIPELINE — ASYNC
 # ─────────────────────────
-async def run_pipeline(user) -> dict:
+async def run_pipeline(user, config: dict) -> dict:
     """
     Main system flow (async):
-    user → risk → ALL loan rates (5) → strategy loans (4) → 5 agents PARALLEL →
-    investment eval (per-strategy real amortization) → judge → result
+      user + config → risk → 3 agents in parallel → investment eval → judge → result
+
+    Args:
+        user: UserInput (validated Pydantic)
+        config: {
+            "business":    {loan_amount, loan_years, savings_to_use, interest_rate},
+            "real_estate": {loan_amount, loan_years, savings_to_use, interest_rate},
+            "stock":       {loan_amount, loan_years, savings_to_use, interest_rate}
+        }
     """
     logger.info("=" * 50)
-    logger.info("Pipeline started (California system v3.1 — 5-agent multi-loan)")
+    logger.info("Pipeline started (CaliforniaCFO v4.0 — 3-agent config-driven)")
     logger.info("=" * 50)
 
-    # 1️⃣ RISK
-    logger.info("Step 1: calculating risk score")
+    # 1️⃣ RISK (for transparency / reporting only — config already has rates)
+    logger.info("Step 1: calculating risk score for reporting")
     risk = calculate_risk_score(user)
     logger.info(
         f"Region: {risk['region_display_name']} | "
@@ -119,54 +207,73 @@ async def run_pipeline(user) -> dict:
         f"Score: {risk['adjusted_score']}"
     )
 
-    # 2️⃣ ALL INTEREST RATES (5 types)
-    logger.info("Step 2: calculating ALL loan interest rates (5 types)")
-    all_rates = calculate_all_loan_rates(risk)
-    for loan_type, rate_data in all_rates.items():
-        logger.info(f"  {loan_type}: {rate_data['interest_rate'] * 100:.2f}%")
+    # 2️⃣ Log user config
+    logger.info("Step 2: user-configured capital allocation:")
+    for strategy_name in ("business", "real_estate", "stock"):
+        s_config = config.get(strategy_name, {})
+        loan_amt = s_config.get("loan_amount", 0)
+        savings = s_config.get("savings_to_use", 0)
+        logger.info(
+            f"  {strategy_name}: loan=${loan_amt:,.0f}, "
+            f"savings=${savings:,.0f}, "
+            f"total=${loan_amt + savings:,.0f}"
+        )
 
-    interest = all_rates["personal"]
+    # 3️⃣ BUILD STRATEGY LOAN OBJECTS (compatibility shim for investment_engine)
+    strategy_loans = _build_strategy_loans_from_config(config)
 
-    # 3️⃣ STRATEGY LOANS (4 strategies)
-    logger.info("Step 3: calculating per-strategy loan offers")
-    strategy_loans = calculate_all_strategy_loans(user, risk, all_rates)
+    # 4️⃣ AGENTS — ASYNC PARALLEL (3 agents)
+    logger.info("Step 4: running 3 investment agents in parallel")
+    agents_results = await run_all_agents(user, config)
+    logger.info(f"Agents returned {len(agents_results)} strategy results")
 
-    for strategy_name, loan_data in strategy_loans.items():
-        if loan_data["approved"]:
-            logger.info(
-                f"  {strategy_name}: ${loan_data['max_loan_amount']:,.0f} "
-                f"@ {loan_data['interest_rate'] * 100:.2f}% "
-                f"({loan_data['loan_years']}y)"
-            )
-        else:
-            logger.warning(f"  {strategy_name}: REJECTED - {loan_data.get('reason')}")
-
-    loan = strategy_loans["personal"]
-
-    # 4️⃣ AGENTS — ASYNC PARALLEL (5 agents)
-    logger.info("Step 4: running 5 investment agents in parallel")
-    agents_results = await run_all_agents(user, strategy_loans)
-    logger.info(f"Agents returned {len(agents_results)} strategies")
-
-    # 5️⃣ INVESTMENT EVALUATION (per-strategy real amortization)
+    # 5️⃣ INVESTMENT EVALUATION (skip rejected strategies)
     logger.info("Step 5: evaluating + ranking strategies (real amortization)")
-    ranked = get_best_investments(user, agents_results, strategy_loans)
+    valid_strategies = [r for r in agents_results if not r.get("rejected")]
+    rejected_strategies = [r for r in agents_results if r.get("rejected")]
+
+    if valid_strategies:
+        ranked = get_best_investments(user, valid_strategies, strategy_loans)
+    else:
+        ranked = []
+        logger.warning("No valid strategies to rank (all rejected)")
+
+    # Append rejected ones at the end (so frontend can show them)
+    ranked = ranked + rejected_strategies
 
     for r in ranked:
-        logger.info(
-            f"  {r['agent']}: net_return={r['net_return'] * 100:.2f}%, "
-            f"status={r['status']}, score={r['score']}"
-        )
+        if r.get("rejected"):
+            logger.warning(f"  {r['agent']}: REJECTED — {r.get('rejection_reason', 'unknown')}")
+        else:
+            logger.info(
+                f"  {r['agent']}: net_return={r.get('net_return', 0) * 100:.2f}%, "
+                f"status={r.get('status', 'unknown')}, "
+                f"score={r.get('score', 0)}"
+            )
 
-    # 6️⃣ JUDGE — ASYNC
+    # 6️⃣ JUDGE — ASYNC (skip if no valid strategies)
     logger.info("Step 6: judge agent — selecting best strategy")
-    judgment = await run_judge_agent(user, loan, ranked)
 
-    if judgment.get("recommended"):
-        logger.info(
-            f"Judge recommended: {judgment['recommended'].get('agent', 'unknown')} "
-            f"(profile: {judgment.get('profile_used', 'unknown')})"
-        )
+    # Build placeholder "loan" object for judge (uses business loan as primary)
+    primary_loan = strategy_loans["business"]
+
+    if valid_strategies:
+        judgment = await run_judge_agent(user, primary_loan, [r for r in ranked if not r.get("rejected")])
+
+        if judgment.get("recommended"):
+            logger.info(
+                f"Judge recommended: {judgment['recommended'].get('agent', 'unknown')} "
+                f"(profile: {judgment.get('profile_used', 'unknown')})"
+            )
+    else:
+        judgment = {
+            "recommended": None,
+            "reasoning": "All strategies were rejected based on your configuration. "
+                         "Please adjust your loan amounts or savings allocation.",
+            "next_step": "Review the rejection reasons for each strategy and reconfigure.",
+            "comparison": "",
+            "profile_used": user.preferences.risk_profile.value,
+        }
 
     user_risk_pref = user.preferences.risk_profile.value
     logger.info("Pipeline finished")
@@ -174,132 +281,21 @@ async def run_pipeline(user) -> dict:
     return {
         "user_summary": _build_user_summary(user),
         "risk": _build_risk_section(user, risk),
-        "interest": interest,
-        "loan": loan,
+        "config": config,
         "loans": strategy_loans,
-        "all_rates": all_rates,
         "strategies": ranked,
         "recommendation": judgment.get("recommended"),
         "reasoning": judgment.get("reasoning", ""),
         "next_step": judgment.get("next_step", ""),
         "comparison": judgment.get("comparison", ""),
         "profile_used": judgment.get("profile_used", user_risk_pref),
+        "rejected_count": len(rejected_strategies),
+        "detailed_explanation": judgment.get("detailed_explanation"),  # ✅ FIXED
+        "comparison_charts": judgment.get("comparison_charts"),         # ✅ FIXED
     }
-
 
 # ─────────────────────────
-# 🚀 SIMULATION PIPELINE (PRESERVED!)
-# ─────────────────────────
-async def run_simulation_pipeline(user, simulation_choice) -> dict:
-    """
-    Custom calculator: user chooses loan params and savings allocation.
-    Uses PERSONAL loan type for backward compat with simulator UI.
-    """
-    logger.info("=" * 50)
-    logger.info("Simulation pipeline started (California system)")
-    logger.info(f"User chose: loan={simulation_choice.loan_amount}, "
-                f"years={simulation_choice.loan_years}, "
-                f"savings_to_invest={simulation_choice.savings_to_invest}")
-    logger.info("=" * 50)
-
-    # 1️⃣ RISK + INTEREST
-    risk = calculate_risk_score(user)
-    interest = calculate_interest_rate(risk, loan_type="personal")
-    annual_rate = interest["interest_rate"]
-
-    # 2️⃣ CUSTOM LOAN
-    logger.info("Step 2: calculating custom loan")
-    loan = calculate_custom_loan(
-        loan_amount=simulation_choice.loan_amount,
-        loan_years=simulation_choice.loan_years,
-        annual_rate=annual_rate,
-        user=user,
-        risk=risk,
-        loan_type="personal",
-    )
-
-    if not loan["approved"]:
-        return {
-            "user_summary": _build_user_summary(user),
-            "risk": _build_risk_section(user, risk),
-            "interest": interest,
-            "loan": loan,
-            "simulation_request": simulation_choice.model_dump(),
-            "error": "Simulation parameters invalid",
-            "strategies": [],
-            "recommendation": None,
-        }
-
-    # 3️⃣ ADAPT USER
-    adapted_user = user.model_copy(deep=True)
-    adapted_user.financial.savings = int(simulation_choice.savings_to_invest)
-
-    # 4️⃣ BUILD SHARED LOAN FOR ALL STRATEGIES
-    custom_loan_obj = {
-        "approved": loan["loan_amount"] > 0,
-        "max_loan_amount": loan["loan_amount"],
-        "monthly_payment": loan["monthly_payment"],
-        "annual_payment": loan.get("annual_payment", loan["monthly_payment"] * 12),
-        "interest_rate": loan["interest_rate"],
-        "loan_years": loan["loan_years"],
-        "loan_type": "personal",
-        "total_paid": loan.get("total_paid", 0),
-        "total_interest": loan.get("total_interest", 0),
-    }
-
-    simulation_strategy_loans = {
-        "business": custom_loan_obj,
-        "real_estate": custom_loan_obj,
-        "stock_margin": custom_loan_obj,
-        "personal": custom_loan_obj,
-    }
-
-    # 5️⃣ AGENTS
-    logger.info("Step 5: running agents with custom parameters")
-    agents_results = await run_all_agents(adapted_user, simulation_strategy_loans)
-
-    # 6️⃣ INVESTMENT EVALUATION
-    ranked = get_best_investments(adapted_user, agents_results, simulation_strategy_loans)
-
-    # 7️⃣ JUDGE
-    logger.info("Step 7: judge agent")
-    judgment = await run_judge_agent(adapted_user, custom_loan_obj, ranked)
-
-    user_risk_pref = user.preferences.risk_profile.value
-    saved_buffer = user.financial.savings - simulation_choice.savings_to_invest
-    total_invested = simulation_choice.savings_to_invest + simulation_choice.loan_amount
-
-    return {
-        "user_summary": _build_user_summary(user),
-        "risk": _build_risk_section(user, risk),
-        "interest": interest,
-        "loan": loan,
-        "simulation": {
-            "user_chose": {
-                "loan_amount": simulation_choice.loan_amount,
-                "loan_years": simulation_choice.loan_years,
-                "savings_to_invest": simulation_choice.savings_to_invest,
-            },
-            "calculated": {
-                "monthly_payment": loan["monthly_payment"],
-                "total_paid": loan["total_paid"],
-                "total_interest": loan["total_interest"],
-                "total_capital_invested": round(total_invested, 2),
-                "savings_kept_as_buffer": round(saved_buffer, 2),
-            },
-            "scenario": loan["scenario"],
-        },
-        "strategies": ranked,
-        "recommendation": judgment.get("recommended"),
-        "reasoning": judgment.get("reasoning", ""),
-        "next_step": judgment.get("next_step", ""),
-        "comparison": judgment.get("comparison", ""),
-        "profile_used": judgment.get("profile_used", user_risk_pref),
-    }
-
-
-# ─────────────────────────
-# 🛠️ HELPERS (preserved)
+# 🛠️ HELPERS
 # ─────────────────────────
 def _build_user_summary(user) -> dict:
     return {
