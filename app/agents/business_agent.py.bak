@@ -1,0 +1,594 @@
+# app/agents/business_agent.py
+"""
+Unified Business Agent v5.0 — REALISTIC OUTPUT.
+
+User specifies capital allocation via config:
+  config = {
+    "loan_amount": 50000,
+    "loan_years": 7,
+    "savings_to_use": 20000,
+    "interest_rate": 0.07,
+  }
+
+v5.0 NEW FIELDS (defense-grade realism):
+  - market_context     : competition, market size, growth rate
+  - unit_economics     : price × units = revenue (CFO-level)
+  - projections        : Y1/Y3/Y5 revenue/costs/cash flow
+  - scenarios          : best/base/worst case annual returns
+  - break_even         : month X, units/month needed
+
+Modes (auto-detected):
+  - Cash-only: loan_amount = 0, savings_to_use > 0
+  - Loan-only: loan_amount > 0, savings_to_use = 0
+  - Mixed: both > 0
+"""
+
+from app.services.llm_service import call_llm_text as call_llm
+from app.agents._common import (
+    parse_llm_json, clamp, safe_list, safe_str, safe_dict, call_llm_with_retry
+)
+from app.core.california_config import REGION_DATA
+from app.rag.retriever import retrieve
+
+
+# ─────────────────────────────────
+# 📚 RAG CONTEXT BUILDER
+# ─────────────────────────────────
+def _build_rag_context(user) -> tuple[str, list]:
+    region = user.location.region.value
+    profession = user.professional.profession
+    sector = user.professional.sector.value
+    interests = ", ".join(user.professional.interests) if user.professional.interests else ""
+
+    primary_query = f"California {region} {sector} {profession} business {interests}"
+    secondary_query = f"California {sector} business tax LLC franchise"
+
+    business_chunks = retrieve(primary_query, top_k=2, category_filter="business")
+    tax_chunks = retrieve(secondary_query, top_k=1, category_filter="tax")
+
+    all_chunks = business_chunks + tax_chunks
+
+    if not all_chunks:
+        return "", []
+
+    context_parts = ["📚 RELEVANT CALIFORNIA BUSINESS KNOWLEDGE BASE:\n"]
+    for i, chunk in enumerate(all_chunks, 1):
+        context_parts.append(
+            f"\n═══ Knowledge {i}: {chunk['id']} "
+            f"(relevance: {chunk['similarity_score'] * 100:.0f}%) ═══\n"
+            f"Category: {chunk['category']} | Sources: {chunk.get('sources', 'N/A')}\n\n"
+            f"{chunk['content'][:800]}\n"
+        )
+
+    return "\n".join(context_parts), [c['id'] for c in all_chunks]
+
+
+# ─────────────────────────────────
+# 📊 HOURS CONFIGURATION
+# ─────────────────────────────────
+HOURS_DESCRIPTIONS = {
+    "0-5": "Less than 5h/week (PASSIVE — needs automation, hands-off operation)",
+    "5-15": "5-15h/week (LIGHT — weekend/evening side hustle, productized service)",
+    "15-30": "15-30h/week (MODERATE — serious side business, can take some calls)",
+    "30+": "30+h/week (HEAVY — can run full operation, scaling business)"
+}
+
+HOURS_RETURN_CAP = {
+    "0-5": {"max": 0.07, "label": "passive (3-7% realistic)"},
+    "5-15": {"max": 0.12, "label": "light effort (7-12% realistic)"},
+    "15-30": {"max": 0.16, "label": "moderate (10-16% realistic)"},
+    "30+": {"max": 0.20, "label": "full commitment (15-20% realistic)"},
+}
+
+HORIZON_RETURN_MODIFIER = {
+    "1-3": 1.20,
+    "3-5": 1.10,
+    "5-8": 1.00,
+    "8+": 0.85,
+}
+
+
+def _calculate_max_return(user) -> float:
+    if user is None:
+        return 0.15
+    hours_value = user.professional.weekly_hours.value
+    horizon_value = user.preferences.horizon.value
+    base_max = HOURS_RETURN_CAP.get(hours_value, {"max": 0.10})["max"]
+    modifier = HORIZON_RETURN_MODIFIER.get(horizon_value, 1.0)
+    return min(base_max * modifier, 0.25)
+
+
+def _detect_mode(config: dict) -> str:
+    loan_amount = config.get("loan_amount", 0)
+    savings_to_use = config.get("savings_to_use", 0)
+    if loan_amount > 0 and savings_to_use > 0:
+        return "mixed"
+    elif loan_amount > 0:
+        return "loan"
+    else:
+        return "cash"
+
+
+def _calculate_loan_payment(loan_amount: float, rate: float, years: int) -> dict:
+    if loan_amount <= 0 or rate <= 0 or years <= 0:
+        return {"monthly_payment": 0, "annual_payment": 0, "total_paid": 0, "total_interest": 0}
+    months = years * 12
+    monthly_rate = rate / 12
+    monthly_payment = (
+        loan_amount * monthly_rate * ((1 + monthly_rate) ** months) /
+        (((1 + monthly_rate) ** months) - 1)
+    )
+    annual_payment = monthly_payment * 12
+    total_paid = monthly_payment * months
+    return {
+        "monthly_payment": round(monthly_payment, 2),
+        "annual_payment": round(annual_payment, 2),
+        "total_paid": round(total_paid, 2),
+        "total_interest": round(total_paid - loan_amount, 2),
+    }
+
+
+# ─────────────────────────────────
+# 🎯 v5.0 REALISTIC PROMPT BUILDER
+# ─────────────────────────────────
+def build_prompt(user, config: dict, rag_context: str = "") -> str:
+    """v5.0 prompt: demands realistic projections + unit economics."""
+
+    loan_amount = config.get("loan_amount", 0)
+    loan_years = config.get("loan_years", 7)
+    savings_to_use = config.get("savings_to_use", 0)
+    interest_rate = config.get("interest_rate", 0)
+
+    total_capital = loan_amount + savings_to_use
+    mode = _detect_mode(config)
+    loan_payment = _calculate_loan_payment(loan_amount, interest_rate, loan_years)
+
+    region = user.location.region
+    region_data = REGION_DATA[region]
+    primary_industries = ", ".join(region_data["primary_industries"])
+
+    interests_text = ", ".join(user.professional.interests) if user.professional.interests else "Not specified"
+    experience_text = user.professional.prior_experience or "No prior business experience"
+
+    hours_value = user.professional.weekly_hours.value
+    hours_desc = HOURS_DESCRIPTIONS.get(hours_value, "Unknown availability")
+
+    max_return = _calculate_max_return(user)
+    return_label = HOURS_RETURN_CAP.get(hours_value, {"label": "moderate"})["label"]
+
+    tech_role = user.professional.tech_role.value if user.professional.tech_role else "N/A"
+    equity = user.professional.equity_compensation.value if user.professional.equity_compensation else "N/A"
+
+    # ⭐ MODE-SPECIFIC SECTIONS
+    if mode == "cash":
+        capital_section = f"""💰 FUNDING MODE: CASH-ONLY
+- Savings allocated: ${round(savings_to_use, 2):,} USD
+- Total capital: ${round(total_capital, 2):,} USD
+- No loan payment burden"""
+        title_marker = "[Cash-Only]"
+        annual_loan_payment_for_proj = 0
+
+    elif mode == "loan":
+        capital_section = f"""🏦 FUNDING MODE: LOAN-FUNDED
+- Loan: ${round(loan_amount, 2):,} @ {interest_rate * 100:.2f}% × {loan_years}yr
+- Monthly: ${loan_payment['monthly_payment']:,.2f}
+- ANNUAL LOAN PAYMENT: ${loan_payment['annual_payment']:,.2f}
+- Total capital: ${round(total_capital, 2):,} USD"""
+        title_marker = "[Loan-Funded]"
+        annual_loan_payment_for_proj = loan_payment['annual_payment']
+
+    else:  # mixed
+        capital_section = f"""⚖️ FUNDING MODE: MIXED
+- Loan: ${round(loan_amount, 2):,} @ {interest_rate * 100:.2f}% × {loan_years}yr
+- Savings: ${round(savings_to_use, 2):,}
+- Total capital: ${round(total_capital, 2):,} USD
+- ANNUAL LOAN PAYMENT: ${loan_payment['annual_payment']:,.2f}"""
+        title_marker = "[Mixed]"
+        annual_loan_payment_for_proj = loan_payment['annual_payment']
+
+    return f"""
+You are a senior California business strategist and CFO-level financial planner.
+
+Your task is to propose ONE realistic, California-aware business idea WITH DETAILED FINANCIAL PROJECTIONS.
+
+USER PROFILE:
+- Age: {user.personal.age}
+- Region: {region_data['display_name']} ({region.value})
+- City: {user.location.city}
+- Primary regional industries: {primary_industries}
+- Profession: {user.professional.profession}
+- Sector: {user.professional.sector.value}
+- Employment: {user.professional.employment_status.value}
+- Tech role: {tech_role}
+- Equity: {equity}
+- Interests: {interests_text}
+- Prior experience: {experience_text}
+- Weekly hours: {hours_desc}
+
+FINANCIAL DATA:
+- Monthly income: ${user.financial.income:,} USD
+- Total savings: ${user.financial.savings:,} USD
+- Cost of living index: {region_data['cost_of_living_index']}x US average
+
+{capital_section}
+
+PREFERENCES:
+- Risk tolerance: {user.preferences.risk_profile.value}
+- Investment horizon: {user.preferences.horizon.value} years
+
+{rag_context}
+
+🌴 CALIFORNIA CONTEXT:
+- LLC franchise tax: $800/year minimum (mandatory)
+- California state income tax: progressive up to 13.3%
+- {region_data['display_name']}: COL {region_data['cost_of_living_index']}x national, industries: {primary_industries}
+- Median home: ${region_data['median_home_price']:,}
+
+🚨 EXPECTED RETURN CAP (NON-NEGOTIABLE):
+User has {hours_desc}. Maximum REALISTIC expected_return: {max_return:.2f} ({return_label})
+DO NOT EXCEED {max_return:.2f}.
+
+═══════════════════════════════════════════════════════════
+🎯 v5.0 REQUIREMENT — REALISTIC OUTPUT (CFO-GRADE)
+═══════════════════════════════════════════════════════════
+
+You MUST provide:
+1. **PROJECTIONS** (Y1, Y3, Y5) — concrete revenue, costs, cash flow per year
+2. **UNIT ECONOMICS** — price per unit × units = revenue (mandatory!)
+3. **MARKET CONTEXT** — competition, market size, growth rate (use realistic numbers)
+4. **SCENARIOS** — best/base/worst case annual returns with narrative
+5. **BREAK-EVEN** — months until profitable, monthly revenue needed
+
+BE REALISTIC. NO HYPE. California businesses face:
+- LLC fees ($800/yr) + state tax (13.3%) + federal tax
+- High customer acquisition costs in competitive markets
+- Year 1 is usually LOSSES or break-even (revenue ramp-up)
+- Year 3+ is when business stabilizes
+- Year 5+ is mature operation
+
+PROJECTION RULES:
+- Year 1: revenue 30-50% of mature run-rate (ramp-up phase)
+- Year 3: revenue 70-90% of run-rate (gaining traction)
+- Year 5: stable operation at full capacity
+- Operating costs: typically 50-70% of revenue (depending on business type)
+- Loan payment is FIXED: ${annual_loan_payment_for_proj:,.2f}/year (from above)
+- Net cash flow = revenue - operating_costs - loan_payment
+
+UNIT ECONOMICS REQUIREMENTS:
+- Define ONE primary revenue unit (e.g., "monthly subscriber", "guest weekend", "service hour", "product sold")
+- Specify realistic price per unit (research-grounded for California market)
+- Project units sold per year (Y1 → Y3) showing growth ramp
+- Gross margin % (typical: 50-70% for service, 30-50% for product)
+- Customer acquisition cost (CAC) — REAL numbers
+
+SCENARIO RULES:
+- Base case: matches your `expected_return` field
+- Best case: +5-8% above base (e.g., explosive growth, ideal market)
+- Worst case: -3-10% below base (e.g., slow ramp, market downturn)
+
+EXAMPLES OF REALISTIC OUTPUTS:
+
+EXAMPLE 1 — Wellness Retreat Business ($200k capital):
+  unit_economics: {{
+    revenue_model: "Weekend retreat packages (2 nights, all-inclusive)",
+    price_per_unit_usd: 1200,
+    unit_name: "guest weekend",
+    target_units_year_1: 80,    // ~7/month, slow ramp
+    target_units_year_3: 200,   // ~17/month, established
+    gross_margin_pct: 55,
+    customer_acquisition_cost_usd: 150
+  }}
+  projections: {{
+    year_1: {{ revenue: 96000, operating_costs: 60000, loan_payment: 44944, net_cash_flow: -8944 }},
+    year_3: {{ revenue: 240000, operating_costs: 120000, loan_payment: 44944, net_cash_flow: 75056 }},
+    year_5: {{ revenue: 360000, operating_costs: 165000, loan_payment: 44944, net_cash_flow: 150056 }}
+  }}
+
+EXAMPLE 2 — SaaS Product ($75k capital, 5-15h/week):
+  unit_economics: {{
+    revenue_model: "Monthly subscription SaaS",
+    price_per_unit_usd: 49,
+    unit_name: "monthly subscriber",
+    target_units_year_1: 60,      // 60 customers by end Y1
+    target_units_year_3: 400,
+    gross_margin_pct: 80,         // High for SaaS
+    customer_acquisition_cost_usd: 80
+  }}
+
+═══════════════════════════════════════════════════════════
+REQUIRED OUTPUT FORMAT (STRICT JSON):
+═══════════════════════════════════════════════════════════
+
+Return ONLY valid JSON (no markdown fences):
+
+{{
+  "agent": "business",
+  "title": "{title_marker} ...",
+  "description": "3-4 sentences. Specific to {region_data['display_name']}. Mention competition + unique angle.",
+
+  "allocation": {{
+    "initial_investment": 0,
+    "working_capital": 0,
+    "marketing_budget": 0,
+    "legal_and_setup": 0,
+    "reserve": 0
+  }},
+
+  "expected_return": {max_return:.2f},
+  "risk": 0.5,
+  "stability": 0.7,
+
+  "market_context": {{
+    "industry_growth_rate_pct": 0,
+    "key_competitors": ["...", "...", "..."],
+    "market_size_local_usd": 0,
+    "demand_indicator": "..."
+  }},
+
+  "unit_economics": {{
+    "revenue_model": "...",
+    "price_per_unit_usd": 0,
+    "unit_name": "...",
+    "target_units_year_1": 0,
+    "target_units_year_3": 0,
+    "gross_margin_pct": 0,
+    "customer_acquisition_cost_usd": 0
+  }},
+
+  "projections": {{
+    "year_1": {{
+      "revenue": 0,
+      "operating_costs": 0,
+      "loan_payment": {annual_loan_payment_for_proj:.0f},
+      "net_cash_flow": 0
+    }},
+    "year_3": {{
+      "revenue": 0,
+      "operating_costs": 0,
+      "loan_payment": {annual_loan_payment_for_proj:.0f},
+      "net_cash_flow": 0
+    }},
+    "year_5": {{
+      "revenue": 0,
+      "operating_costs": 0,
+      "loan_payment": {annual_loan_payment_for_proj:.0f},
+      "net_cash_flow": 0
+    }}
+  }},
+
+  "scenarios": {{
+    "best_case": {{
+      "annual_return_pct": 0,
+      "narrative": "What needs to happen for this outcome"
+    }},
+    "base_case": {{
+      "annual_return_pct": 0,
+      "narrative": "Most likely realistic outcome"
+    }},
+    "worst_case": {{
+      "annual_return_pct": 0,
+      "narrative": "What could go wrong"
+    }}
+  }},
+
+  "break_even": {{
+    "months_to_breakeven": 0,
+    "monthly_revenue_needed_usd": 0,
+    "units_per_month_needed": 0
+  }},
+
+  "pros": ["...", "...", "..."],
+  "cons": ["...", "..."],
+  "next_steps": ["...", "...", "..."],
+  "time_to_profit": "..."
+}}
+
+VALIDATION CHECKS:
+- expected_return ≤ {max_return:.2f}
+- Allocation sums to ~${round(total_capital, 2):,}
+- projections.year_1.loan_payment = ${annual_loan_payment_for_proj:.0f}
+- unit_economics.price_per_unit_usd > 0
+- break_even.months_to_breakeven between 3-48
+- base_case.annual_return_pct ≈ expected_return × 100
+- best_case > base_case > worst_case
+"""
+
+
+# ─────────────────────────────────
+# 🤖 LLM CALL
+# ─────────────────────────────────
+async def generate_business_idea_llm(user, config: dict) -> tuple[dict, list]:
+    rag_context, rag_chunk_ids = _build_rag_context(user)
+    prompt = build_prompt(user, config, rag_context=rag_context)
+
+    mode = _detect_mode(config)
+    agent_name = f"business_{mode}"
+
+    response = await call_llm_with_retry(
+        llm_call=lambda: call_llm(prompt),
+        agent_name=agent_name
+    )
+
+    return response, rag_chunk_ids
+
+
+# ─────────────────────────────────
+# ✅ VALIDATE v5.0 OUTPUT
+# ─────────────────────────────────
+def _validate_market_context(data: dict) -> dict:
+    """Validates market_context section with defaults."""
+    mc = data.get("market_context") or {}
+    return {
+        "industry_growth_rate_pct": round(clamp(mc.get("industry_growth_rate_pct"), -20, 50, 5), 1),
+        "key_competitors": safe_list(mc.get("key_competitors"), ["Local competitor 1", "Local competitor 2"])[:5],
+        "market_size_local_usd": int(clamp(mc.get("market_size_local_usd"), 0, 10_000_000_000, 0)),
+        "demand_indicator": safe_str(mc.get("demand_indicator"), "Market demand assessment unavailable")[:200],
+    }
+
+
+def _validate_unit_economics(data: dict) -> dict:
+    """Validates unit_economics section with defaults."""
+    ue = data.get("unit_economics") or {}
+    return {
+        "revenue_model": safe_str(ue.get("revenue_model"), "Direct service/product sales")[:150],
+        "price_per_unit_usd": round(clamp(ue.get("price_per_unit_usd"), 0, 1_000_000, 0), 2),
+        "unit_name": safe_str(ue.get("unit_name"), "unit")[:50],
+        "target_units_year_1": int(clamp(ue.get("target_units_year_1"), 0, 1_000_000, 0)),
+        "target_units_year_3": int(clamp(ue.get("target_units_year_3"), 0, 5_000_000, 0)),
+        "gross_margin_pct": round(clamp(ue.get("gross_margin_pct"), 0, 100, 50), 1),
+        "customer_acquisition_cost_usd": round(clamp(ue.get("customer_acquisition_cost_usd"), 0, 100_000, 0), 2),
+    }
+
+
+def _validate_projection_year(year_data: dict, loan_payment_annual: float) -> dict:
+    """Validates a single year's projection."""
+    revenue = round(clamp(year_data.get("revenue"), 0, 50_000_000, 0), 2)
+    op_costs = round(clamp(year_data.get("operating_costs"), 0, 50_000_000, 0), 2)
+    loan_pmt = round(clamp(year_data.get("loan_payment"), 0, 10_000_000, loan_payment_annual), 2)
+    net = round(revenue - op_costs - loan_pmt, 2)
+
+    return {
+        "revenue": revenue,
+        "operating_costs": op_costs,
+        "loan_payment": loan_pmt,
+        "net_cash_flow": net,
+    }
+
+
+def _validate_projections(data: dict, loan_payment_annual: float) -> dict:
+    """Validates projections.year_1, year_3, year_5."""
+    proj = data.get("projections") or {}
+    return {
+        "year_1": _validate_projection_year(proj.get("year_1") or {}, loan_payment_annual),
+        "year_3": _validate_projection_year(proj.get("year_3") or {}, loan_payment_annual),
+        "year_5": _validate_projection_year(proj.get("year_5") or {}, loan_payment_annual),
+    }
+
+
+def _validate_scenarios(data: dict, base_return: float) -> dict:
+    """Validates scenarios — enforces best > base > worst."""
+    sc = data.get("scenarios") or {}
+
+    base_pct = round(base_return * 100, 1)
+
+    def _v(key, default_pct, narrative_default):
+        item = sc.get(key) or {}
+        return {
+            "annual_return_pct": round(clamp(item.get("annual_return_pct"), -50, 50, default_pct), 1),
+            "narrative": safe_str(item.get("narrative"), narrative_default)[:300],
+        }
+
+    best = _v("best_case", base_pct + 6, "Strong execution + favorable market conditions")
+    base = _v("base_case", base_pct, "Realistic outcome assuming normal execution")
+    worst = _v("worst_case", base_pct - 6, "Slow customer acquisition or market downturn")
+
+    # Enforce best > base > worst
+    if best["annual_return_pct"] <= base["annual_return_pct"]:
+        best["annual_return_pct"] = round(base["annual_return_pct"] + 5, 1)
+    if worst["annual_return_pct"] >= base["annual_return_pct"]:
+        worst["annual_return_pct"] = round(base["annual_return_pct"] - 5, 1)
+
+    return {"best_case": best, "base_case": base, "worst_case": worst}
+
+
+def _validate_break_even(data: dict) -> dict:
+    """Validates break-even with reasonable defaults."""
+    be = data.get("break_even") or {}
+    return {
+        "months_to_breakeven": int(clamp(be.get("months_to_breakeven"), 1, 60, 12)),
+        "monthly_revenue_needed_usd": round(clamp(be.get("monthly_revenue_needed_usd"), 0, 10_000_000, 0), 2),
+        "units_per_month_needed": round(clamp(be.get("units_per_month_needed"), 0, 100_000, 0), 1),
+    }
+
+
+def validate_business_output(data: dict, user=None, config: dict = None) -> dict:
+    """v5.0 validator — includes new realistic fields."""
+    max_return = _calculate_max_return(user)
+    raw_return = data.get("expected_return", 0.10)
+    capped_return = round(clamp(raw_return, 0.01, max_return, 0.07), 4)
+
+    # Mode-specific defaults
+    if config:
+        mode = _detect_mode(config)
+        if mode == "cash":
+            default_risk, default_stability = 0.4, 0.7
+        elif mode == "loan":
+            default_risk, default_stability = 0.55, 0.55
+        else:
+            default_risk, default_stability = 0.5, 0.6
+        loan_payment_annual = _calculate_loan_payment(
+            config.get("loan_amount", 0),
+            config.get("interest_rate", 0),
+            config.get("loan_years", 0)
+        )["annual_payment"]
+    else:
+        default_risk, default_stability = 0.5, 0.5
+        loan_payment_annual = 0
+
+    # Title with mode prefix
+    title = safe_str(data.get("title"), "Business opportunity")
+    if config:
+        mode = _detect_mode(config)
+        marker = {"cash": "[Cash-Only]", "loan": "[Loan-Funded]", "mixed": "[Mixed]"}[mode]
+        if not (title.startswith("[Cash") or title.startswith("[Loan") or title.startswith("[Mixed")):
+            title = f"{marker} {title}"
+
+    return {
+        "agent": "business",
+        "title": title,
+        "description": safe_str(
+            data.get("description"),
+            "A business venture leveraging user's skills and available capital."
+        ),
+        "allocation": safe_dict(data.get("allocation"), {
+            "initial_investment": 0,
+            "working_capital": 0,
+            "marketing_budget": 0,
+            "legal_and_setup": 0,
+            "reserve": 0,
+        }),
+        "expected_return": capped_return,
+        "risk": round(clamp(data.get("risk"), 0, 1, default_risk), 4),
+        "stability": round(clamp(data.get("stability"), 0, 1, default_stability), 4),
+
+        # ⭐ v5.0 NEW FIELDS
+        "market_context": _validate_market_context(data),
+        "unit_economics": _validate_unit_economics(data),
+        "projections": _validate_projections(data, loan_payment_annual),
+        "scenarios": _validate_scenarios(data, capped_return),
+        "break_even": _validate_break_even(data),
+
+        "pros": safe_list(data.get("pros"), []),
+        "cons": safe_list(data.get("cons"), []),
+        "next_steps": safe_list(data.get("next_steps"), []),
+        "time_to_profit": safe_str(data.get("time_to_profit"), "6-12 months"),
+    }
+
+
+# ─────────────────────────────────
+# 🚀 MAIN AGENT FUNCTION
+# ─────────────────────────────────
+async def run_business_agent(user, config: dict) -> dict:
+    """v5.0 unified business agent with realistic projections."""
+
+    if config is None:
+        config = {
+            "loan_amount": 0,
+            "loan_years": 0,
+            "savings_to_use": user.financial.savings,
+            "interest_rate": 0,
+        }
+
+    raw, rag_chunk_ids = await generate_business_idea_llm(user, config)
+    result = validate_business_output(raw, user=user, config=config)
+    result["rag_sources"] = rag_chunk_ids
+
+    # Embed config metadata for investment engine
+    result["funding_mode"] = _detect_mode(config)
+    result["loan_amount"] = config.get("loan_amount", 0)
+    result["loan_years"] = config.get("loan_years", 0)
+    result["savings_used"] = config.get("savings_to_use", 0)
+    result["interest_rate"] = config.get("interest_rate", 0)
+    result["total_capital"] = config.get("loan_amount", 0) + config.get("savings_to_use", 0)
+
+    return result

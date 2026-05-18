@@ -1,0 +1,558 @@
+# app/core/profession_catalog.py
+"""
+California-focused profession catalog organized by sector.
+
+400+ professions across 12 sectors, weighted toward California's actual
+labor market (BLS California data + LinkedIn job posting analysis).
+
+Sector distribution:
+- Technology:    80 (Silicon Valley dominance)
+- Entertainment: 50 (Hollywood, music, gaming)
+- Biotechnology: 35 (SD biotech corridor, Bay Area pharma)
+- Healthcare:    50 (statewide demand)
+- Agriculture:   25 (Central Valley)
+- Government:    35 (Sacramento, military, education)
+- Finance:       30 (SF financial district, LA banks)
+- Education:     25 (UC/CSU/CC systems)
+- Tourism:       25 (SF, LA, SD, Napa, Tahoe)
+- Manufacturing: 20 (aerospace, EV, semiconductor)
+- Retail:        20 (e-commerce HQs, retail chains)
+- Other:         15 (legal, journalism, etc.)
+"""
+
+PROFESSIONS_BY_SECTOR = {
+    "Technology": [
+        # Engineering — Software
+        "Software Engineer",
+        "Senior Software Engineer",
+        "Staff Software Engineer",
+        "Principal Software Engineer",
+        "Software Engineering Manager",
+        "Frontend Engineer",
+        "Backend Engineer",
+        "Full Stack Engineer",
+        "Mobile Engineer (iOS)",
+        "Mobile Engineer (Android)",
+        "Embedded Systems Engineer",
+        "Firmware Engineer",
+        "Game Developer",
+        "Game Engine Programmer",
+        # Data / AI / ML
+        "Data Scientist",
+        "Senior Data Scientist",
+        "Machine Learning Engineer",
+        "ML Research Scientist",
+        "AI Researcher",
+        "Applied AI Engineer",
+        "Data Engineer",
+        "Analytics Engineer",
+        "Data Analyst",
+        "Business Intelligence Engineer",
+        # Infrastructure / DevOps
+        "DevOps Engineer",
+        "Site Reliability Engineer (SRE)",
+        "Platform Engineer",
+        "Cloud Architect",
+        "Cloud Engineer (AWS/GCP/Azure)",
+        "Infrastructure Engineer",
+        "Systems Administrator",
+        "Network Engineer",
+        "Database Administrator",
+        # Security
+        "Security Engineer",
+        "Application Security Engineer",
+        "Penetration Tester",
+        "Security Analyst",
+        "Chief Information Security Officer (CISO)",
+        # Specialty Engineering
+        "Computer Vision Engineer",
+        "Robotics Engineer",
+        "Autonomous Vehicle Engineer",
+        "AR/VR Developer",
+        "Blockchain Engineer",
+        "Quantitative Developer",
+        "Compiler Engineer",
+        "Distributed Systems Engineer",
+        # Product / Design
+        "Product Manager",
+        "Senior Product Manager",
+        "Director of Product",
+        "Product Designer",
+        "UX Designer",
+        "UI Designer",
+        "Design Researcher",
+        "Product Marketing Manager",
+        "Technical Product Manager",
+        # QA / Testing
+        "QA Engineer",
+        "Test Automation Engineer",
+        "Software Tester",
+        # Leadership / Executive
+        "CTO (Chief Technology Officer)",
+        "VP of Engineering",
+        "Director of Engineering",
+        "Engineering Manager",
+        "Tech Lead",
+        # Sales / Customer-facing
+        "Solutions Engineer",
+        "Sales Engineer",
+        "Technical Account Manager",
+        "Developer Advocate",
+        "Customer Success Engineer",
+        "Customer Support Specialist",
+        # Startup / Founder
+        "Founder / CEO",
+        "Co-Founder",
+        "Technical Co-Founder",
+        # Misc Tech
+        "IT Manager",
+        "IT Support Specialist",
+        "Technical Writer",
+        "Scrum Master",
+        "Agile Coach",
+        "Open Source Maintainer",
+        "Web Developer",
+        "WordPress Developer",
+        "Salesforce Developer",
+    ],
+
+    "Entertainment": [
+        # Film Production
+        "Film Producer",
+        "Executive Producer",
+        "Film Director",
+        "Assistant Director",
+        "Screenwriter",
+        "Script Editor",
+        "Cinematographer",
+        "Director of Photography",
+        "Camera Operator",
+        "Steadicam Operator",
+        "Gaffer",
+        "Key Grip",
+        "Production Designer",
+        "Art Director",
+        "Set Decorator",
+        "Costume Designer",
+        # Post-Production
+        "Film Editor",
+        "Sound Editor",
+        "Sound Mixer",
+        "Re-recording Mixer",
+        "Foley Artist",
+        "Colorist",
+        "VFX Artist",
+        "VFX Supervisor",
+        "Compositing Artist",
+        "Animator (2D/3D)",
+        "Motion Graphics Designer",
+        # Talent
+        "Actor",
+        "Voice Actor",
+        "Stunt Performer",
+        "Casting Director",
+        "Talent Agent",
+        "Talent Manager",
+        # Music Industry
+        "Musician",
+        "Singer/Songwriter",
+        "Music Producer",
+        "Recording Engineer",
+        "Mastering Engineer",
+        "Composer",
+        "Film Scorer",
+        "Music Supervisor",
+        "DJ",
+        "A&R Representative",
+        # Gaming
+        "Game Designer",
+        "Level Designer",
+        "Game Producer",
+        "Esports Manager",
+        "Esports Player",
+        "Streamer / Content Creator",
+        # Distribution / Business
+        "Distribution Executive",
+        "Studio Executive",
+        "Entertainment Lawyer",
+        "Entertainment Publicist",
+    ],
+
+    "Biotechnology": [
+        "Research Scientist",
+        "Senior Research Scientist",
+        "Principal Scientist",
+        "Bioinformatician",
+        "Computational Biologist",
+        "Genomics Researcher",
+        "Molecular Biologist",
+        "Cell Biologist",
+        "Biochemist",
+        "Pharmacologist",
+        "Clinical Research Associate",
+        "Clinical Trial Manager",
+        "Regulatory Affairs Specialist",
+        "Quality Control Analyst",
+        "Quality Assurance Manager",
+        "Lab Manager",
+        "Lab Technician",
+        "Process Development Scientist",
+        "Manufacturing Scientist",
+        "Bioprocess Engineer",
+        "Biomedical Engineer",
+        "Medical Device Engineer",
+        "Drug Discovery Scientist",
+        "Drug Safety Specialist",
+        "Pharmaceutical Sales Representative",
+        "Medical Science Liaison",
+        "Biotech Patent Attorney",
+        "Biotech Business Development",
+        "VP of R&D (Biotech)",
+        "Chief Scientific Officer (CSO)",
+        "Bioethicist",
+        "Biotech Founder",
+        "Genomics Sales Rep",
+        "Cytogeneticist",
+        "Microbiologist",
+    ],
+
+    "Healthcare": [
+        # Doctors / MDs
+        "Physician (General Practice)",
+        "Internal Medicine Physician",
+        "Pediatrician",
+        "Cardiologist",
+        "Oncologist",
+        "Neurologist",
+        "Psychiatrist",
+        "Dermatologist",
+        "Radiologist",
+        "Anesthesiologist",
+        "Emergency Medicine Physician",
+        "Surgeon (General)",
+        "Orthopedic Surgeon",
+        "Plastic Surgeon",
+        "OB/GYN",
+        "Ophthalmologist",
+        # Nursing
+        "Registered Nurse (RN)",
+        "Nurse Practitioner (NP)",
+        "Certified Nurse Midwife",
+        "ICU Nurse",
+        "ER Nurse",
+        "Operating Room Nurse",
+        "Travel Nurse",
+        "Licensed Vocational Nurse (LVN)",
+        "Certified Nursing Assistant (CNA)",
+        # Allied Health
+        "Physical Therapist",
+        "Occupational Therapist",
+        "Speech-Language Pathologist",
+        "Pharmacist",
+        "Dentist",
+        "Dental Hygienist",
+        "Orthodontist",
+        "Optometrist",
+        "Chiropractor",
+        "Audiologist",
+        "Dietitian / Nutritionist",
+        # Tech / Support
+        "Medical Technologist",
+        "Radiology Technician",
+        "Ultrasound Technician",
+        "Phlebotomist",
+        "Medical Coder / Biller",
+        "Medical Records Specialist",
+        "Healthcare Administrator",
+        "Hospital CEO",
+        "Hospital CFO",
+        # Mental Health
+        "Clinical Psychologist",
+        "Licensed Marriage & Family Therapist",
+        "Licensed Clinical Social Worker",
+        "Substance Abuse Counselor",
+        "School Counselor",
+        # EMS
+        "Paramedic",
+        "EMT",
+    ],
+
+    "Agriculture": [
+        "Farm Owner",
+        "Farm Manager",
+        "Farm Worker",
+        "Crop Producer",
+        "Almond Grower",
+        "Wine Grape Grower",
+        "Vineyard Manager",
+        "Winemaker",
+        "Citrus Grower",
+        "Strawberry Grower",
+        "Avocado Grower",
+        "Dairy Farmer",
+        "Cattle Rancher",
+        "Poultry Farmer",
+        "Beekeeper",
+        "Agricultural Engineer",
+        "Irrigation Specialist",
+        "Soil Scientist",
+        "Crop Consultant",
+        "Pest Control Advisor",
+        "Cannabis Cultivator",
+        "Cannabis Dispensary Owner",
+        "Hydroponic Farmer",
+        "Organic Farm Certifier",
+        "Agricultural Inspector",
+    ],
+
+    "Government": [
+        # Federal
+        "Federal Employee (GS Series)",
+        "FBI Agent",
+        "Military Officer",
+        "Military Enlisted",
+        "Veterans Affairs Officer",
+        "Customs and Border Protection Officer",
+        # State
+        "California State Employee",
+        "Caltrans Engineer",
+        "DMV Manager",
+        "State Park Ranger",
+        "California Highway Patrol Officer",
+        "State Auditor",
+        "State Legislative Aide",
+        "State Senator",
+        "State Assembly Member",
+        "Department of Education Administrator",
+        # Local / City
+        "City Manager",
+        "City Council Member",
+        "Mayor",
+        "Police Officer",
+        "Sheriff's Deputy",
+        "Firefighter",
+        "Fire Captain",
+        "EMT (Government)",
+        "Public Works Director",
+        "City Planner",
+        "Urban Planner",
+        "Building Inspector",
+        "Code Enforcement Officer",
+        "County Supervisor",
+        "Public Defender",
+        "District Attorney",
+        "Judge",
+        "Court Clerk",
+        "Probation Officer",
+        "Social Worker (Government)",
+        "Public Health Officer",
+    ],
+
+    "Finance": [
+        "Investment Banker",
+        "Investment Banking Analyst",
+        "Investment Banking Associate",
+        "Private Equity Associate",
+        "Venture Capital Associate",
+        "VC Partner",
+        "Hedge Fund Analyst",
+        "Portfolio Manager",
+        "Asset Manager",
+        "Wealth Manager",
+        "Financial Advisor",
+        "Certified Financial Planner (CFP)",
+        "Mortgage Broker",
+        "Loan Officer",
+        "Mortgage Underwriter",
+        "Insurance Broker",
+        "Insurance Underwriter",
+        "Actuary",
+        "Quantitative Analyst (Quant)",
+        "Risk Analyst",
+        "Compliance Officer",
+        "Accountant",
+        "Certified Public Accountant (CPA)",
+        "Tax Advisor",
+        "Tax Preparer",
+        "Auditor",
+        "Bookkeeper",
+        "Controller",
+        "Chief Financial Officer (CFO)",
+        "Treasury Analyst",
+    ],
+
+    "Education": [
+        # K-12
+        "Elementary School Teacher",
+        "Middle School Teacher",
+        "High School Teacher",
+        "Special Education Teacher",
+        "ESL Teacher",
+        "Bilingual Teacher",
+        "School Principal",
+        "Assistant Principal",
+        "School District Superintendent",
+        # Higher Ed
+        "Community College Instructor",
+        "University Professor (Tenure-track)",
+        "Adjunct Professor",
+        "Research Professor",
+        "Academic Advisor",
+        "Dean",
+        "University Administrator",
+        # Specialty
+        "Tutor",
+        "Online Course Instructor",
+        "Educational Consultant",
+        "Curriculum Designer",
+        "Instructional Designer",
+        "Education Technology Specialist",
+        "Librarian",
+        "School Psychologist",
+        "Coach (Sports / Academic)",
+    ],
+
+    "Tourism": [
+        "Hotel Manager",
+        "Hotel General Manager",
+        "Front Desk Manager",
+        "Concierge",
+        "Travel Agent",
+        "Tour Guide",
+        "Tour Operator",
+        "Cruise Director",
+        "Event Planner",
+        "Wedding Planner",
+        "Restaurant Owner",
+        "Restaurant Manager",
+        "Executive Chef",
+        "Sous Chef",
+        "Sommelier",
+        "Bartender / Mixologist",
+        "Server (Fine Dining)",
+        "Theme Park Manager",
+        "National Park Ranger",
+        "Wildlife Guide",
+        "Surf Instructor",
+        "Ski Instructor",
+        "Yoga Retreat Owner",
+        "Airbnb Host (Professional)",
+        "Boutique Hotel Owner",
+    ],
+
+    "Manufacturing": [
+        "Aerospace Engineer",
+        "SpaceX Engineer",
+        "Boeing Engineer",
+        "Tesla Manufacturing Engineer",
+        "Automotive Engineer",
+        "Electric Vehicle Engineer",
+        "Battery Engineer",
+        "Semiconductor Engineer",
+        "Chip Design Engineer",
+        "Process Engineer",
+        "Quality Engineer",
+        "Manufacturing Engineer",
+        "Industrial Engineer",
+        "Production Manager",
+        "Plant Manager",
+        "Operations Manager",
+        "Supply Chain Manager",
+        "Logistics Coordinator",
+        "Procurement Specialist",
+        "Materials Scientist",
+    ],
+
+    "Retail": [
+        "Retail Store Manager",
+        "Retail Buyer",
+        "Visual Merchandiser",
+        "E-commerce Manager",
+        "Amazon Seller",
+        "Shopify Store Owner",
+        "Etsy Shop Owner",
+        "Brand Manager",
+        "Marketing Director",
+        "Digital Marketing Manager",
+        "SEO Specialist",
+        "PPC Specialist",
+        "Content Marketing Manager",
+        "Social Media Manager",
+        "Influencer / Creator",
+        "Fashion Designer",
+        "Apparel Buyer",
+        "Cosmetics Counter Manager",
+        "Grocery Store Manager",
+        "Wine Shop Owner",
+    ],
+
+    "Other": [
+        "Lawyer (Corporate)",
+        "Lawyer (Litigation)",
+        "Lawyer (Immigration)",
+        "Paralegal",
+        "Journalist",
+        "Newspaper Editor",
+        "Photographer (Wedding/Commercial)",
+        "Real Estate Agent",
+        "Real Estate Broker",
+        "Architect",
+        "Interior Designer",
+        "Landscape Architect",
+        "Construction Manager",
+        "General Contractor",
+        "Electrician",
+        "Plumber",
+        "HVAC Technician",
+        "Auto Mechanic",
+        "Truck Driver (Long-haul)",
+        "Uber/Lyft Driver",
+        "Delivery Driver (DoorDash/Amazon)",
+        "Translator / Interpreter",
+        "Pet Groomer",
+        "Veterinarian",
+        "Personal Trainer",
+        "Massage Therapist",
+        "Funeral Director",
+        "Religious Worker",
+        "Childcare Provider",
+        "Stay-at-home Parent",
+        "Student",
+        "Unemployed",
+        "Retired",
+    ],
+}
+
+
+# ─────────────────────────────────
+# 🛠️ HELPERS
+# ─────────────────────────────────
+def get_professions_for_sector(sector: str) -> list[str]:
+    """Returns list of professions for given sector. Empty list if sector unknown."""
+    return PROFESSIONS_BY_SECTOR.get(sector, [])
+
+
+def get_all_professions() -> list[str]:
+    """Returns flat list of all professions across all sectors."""
+    all_profs = []
+    for prof_list in PROFESSIONS_BY_SECTOR.values():
+        all_profs.extend(prof_list)
+    return sorted(set(all_profs))
+
+
+def get_sector_for_profession(profession: str) -> str | None:
+    """Reverse lookup: returns sector for a given profession, or None."""
+    for sector, profs in PROFESSIONS_BY_SECTOR.items():
+        if profession in profs:
+            return sector
+    return None
+
+
+def get_profession_count_by_sector() -> dict[str, int]:
+    """Returns count of professions per sector (for stats / debugging)."""
+    return {sector: len(profs) for sector, profs in PROFESSIONS_BY_SECTOR.items()}
+
+
+def get_total_profession_count() -> int:
+    """Returns total number of unique professions across all sectors."""
+    return len(get_all_professions())

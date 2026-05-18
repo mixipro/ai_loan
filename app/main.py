@@ -9,6 +9,7 @@ from fastapi.staticfiles import StaticFiles
 import uvicorn
 
 from app.api.routes import router
+from app.api.loan_offers import router as loan_offers_router
 
 # ─────────────────────────
 # 🪵 LOGGER
@@ -42,6 +43,7 @@ app.add_middleware(
 
 # Register API routes
 app.include_router(router)
+app.include_router(loan_offers_router)
 
 # ─────────────────────────
 # 🌐 FRONTEND
