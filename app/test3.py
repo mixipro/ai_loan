@@ -13,7 +13,7 @@ from app.core.california_config import CaliforniaRegion
 from app.models.user import (
     UserInput, PersonalInfo, LocationInfo, FinancialInfo,
     ProfessionalInfo, Preferences,
-    CaliforniaSector, Profession, EmploymentStatus,
+    CaliforniaSector, EmploymentStatus,
     RiskProfile, HorizonGroup, WeeklyHours,
     Currency,
 )
