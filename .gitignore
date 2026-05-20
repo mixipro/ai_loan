@@ -3,3 +3,8 @@
 __pycache__/
 .env
 *.pyc
+
+# Vite cache
+vite/deps/
+node_modules/
+dist/
