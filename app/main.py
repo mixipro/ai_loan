@@ -48,7 +48,7 @@ app.include_router(loan_offers_router)
 # ─────────────────────────
 # 🌐 FRONTEND
 # ─────────────────────────
-FRONTEND_DIR = Path(__file__).parent.parent / "frontend"
+FRONTEND_DIR = Path(__file__).parent.parent / "frontend-react"
 
 
 @app.get("/")

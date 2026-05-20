@@ -1,0 +1,32 @@
+{
+  "timestamp": "2026-05-20T06:46:04.543120",
+  "backend_url": "http://localhost:8000",
+  "profiles": [
+    {
+      "profile_id": "truck_driver_sd",
+      "profile_name": "Truck Driver — San Diego",
+      "success": true,
+      "error": null,
+      "winner_correct": true,
+      "winner_actual": "stock",
+      "winner_expected": [
+        "stock",
+        "real_estate"
+      ],
+      "business_status_correct": true,
+      "business_status_actual": "not_profitable",
+      "real_estate_status_correct": true,
+      "real_estate_status_actual": "marginal",
+      "stock_status_correct": true,
+      "stock_status_actual": "profitable",
+      "business_type_correct": true,
+      "business_type_actual": "passive_income",
+      "drift_check_passed": true,
+      "drift_check_detail": "RE property value $400,000.0 ≤ $700,000 ✓",
+      "latency_sec": 27.56,
+      "input_tokens": 10197,
+      "output_tokens": 8156,
+      "cost_usd": 0.1529
+    }
+  ]
+}
