@@ -1,10 +1,58 @@
+# ═══════════════════════════════════════════════════════════
+# CaliforniaCFO — .gitignore (monorepo)
+# ═══════════════════════════════════════════════════════════
 
+# ─── Python / Backend ───
 .venv/
 __pycache__/
-.env
 *.pyc
-
-# Vite cache
-vite/deps/
-node_modules/
+*.pyo
+*.pyd
+.Python
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+*.egg-info/
 dist/
+build/
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# FAISS generated index
+app/rag/faiss_index/*.bin
+app/rag/faiss_index/*.pkl
+
+# ─── Node / Frontend ───
+node_modules/
+frontend-react/node_modules/
+frontend-react/dist/
+frontend-react/.vite/
+frontend-react/coverage/
+frontend-react/*.tsbuildinfo
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Editor directories
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+.idea/
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Temp files
+*.tmp
+.cache/
