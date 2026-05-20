@@ -164,3 +164,10 @@ status: ## Show project status
 	@bash -c 'source $$HOME/.nvm/nvm.sh 2>/dev/null && echo "node:      $$(node --version)" && echo "npm:       $$(npm --version)"'
 	@echo "Backend:   $$([ -d .venv ] && echo 'Configured' || echo 'Not configured (run: make install)')"
 	@echo "Frontend:  $$([ -d frontend-react/node_modules ] && echo 'Configured' || echo 'Not configured (run: make install)')"
+# ─── Evaluation suite ───
+.PHONY: eval eval-fast
+eval:  ## Run full evaluation suite (8 profiles, ~5-10 min)
+	uv run python evals/run_evaluation.py
+
+eval-fast:  ## Smoke test 1 profile (~30-60s)
+	uv run python evals/run_evaluation.py --fast

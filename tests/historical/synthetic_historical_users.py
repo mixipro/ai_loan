@@ -21,7 +21,7 @@ class SyntheticHistoricalUsers:
                     "currency": "USD",
                 },
                 "professional": {
-                    "sector": "Entertainment & Media",
+                    "sector": "Entertainment",
                     "profession": "Producer",
                     "employment_status": "full-time",
                     "interests": ["investing", "videography", "writing", "startups"],
@@ -498,7 +498,7 @@ class SyntheticHistoricalUsers:
                     "currency": "USD",
                 },
                 "professional": {
-                    "sector": "Entertainment & Media",
+                    "sector": "Entertainment",
                     "profession": "Content Creator",
                     "employment_status": "full-time",
                     "interests": ["videography", "writing", "investing", "podcasts"],
@@ -974,7 +974,7 @@ class SyntheticHistoricalUsers:
                     "currency": "USD",
                 },
                 "professional": {
-                    "sector": "Finance & Banking",
+                    "sector": "Finance",
                     "profession": "Portfolio Manager",
                     "employment_status": "full-time",
                     "interests": ["investing", "trading", "reading", "podcasts"],
@@ -1130,7 +1130,7 @@ class SyntheticHistoricalUsers:
                     "currency": "USD",
                 },
                 "professional": {
-                    "sector": "Government & Public Sector",
+                    "sector": "Government",
                     "profession": "Public Administrator",
                     "employment_status": "full-time",
                     "interests": ["investing", "reading", "history", "online courses"],
@@ -2264,7 +2264,7 @@ class SyntheticHistoricalUsers:
                     "currency": "USD",
                 },
                 "professional": {
-                    "sector": "Finance & Banking",
+                    "sector": "Finance",
                     "profession": "Portfolio Manager",
                     "employment_status": "full-time",
                     "interests": ["investing", "reading", "design", "online courses"],

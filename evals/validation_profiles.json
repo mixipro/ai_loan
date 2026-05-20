@@ -1,0 +1,217 @@
+{
+  "version": "1.1",
+  "description": "CaliforniaCFO validation set — 8 California-representative profiles. Enum values synced with backend /options endpoint (May 2026).",
+  "profiles": [
+    {
+      "id": "truck_driver_sd",
+      "name": "Truck Driver — San Diego",
+      "rationale": "Passive worker (0-5h/week). Tests hours-aware filtering: must get passive_income business (NOT services or e-commerce).",
+      "input": {
+        "user": {
+          "personal": {"age": 42},
+          "location": {"region": "SAN_DIEGO", "city": "Chula Vista"},
+          "financial": {"income": 5500, "expenses": 3500, "monthly_debt": 800, "savings": 120000, "currency": "USD"},
+          "professional": {"sector": "Other", "profession": "Truck Driver", "employment_status": "full-time", "interests": ["real estate", "investing"], "prior_experience": "No business experience", "weekly_hours": "0-5"},
+          "preferences": {"risk_profile": "medium", "horizon": "5-8"}
+        },
+        "config": {
+          "business": {"loan_amount": 80000, "loan_years": 7, "savings_to_use": 40000, "interest_rate": 0.07},
+          "real_estate": {"loan_amount": 320000, "loan_years": 30, "savings_to_use": 80000, "interest_rate": 0.055},
+          "stock": {"loan_amount": 0, "loan_years": 0, "savings_to_use": 65000, "interest_rate": 0}
+        }
+      },
+      "expected": {
+        "winner_agent": ["stock", "real_estate", "business"],
+        "business_type": ["passive_income"],
+        "business_status": ["profitable", "marginal", "not_profitable"],
+        "real_estate_status": ["profitable", "marginal", "not_profitable", "rejected"],
+        "stock_status": ["profitable", "marginal"],
+        "property_value_max_usd": 700000,
+        "no_palo_alto_drift": true
+      }
+    },
+    {
+      "id": "doctor_bay_area",
+      "name": "Doctor — Bay Area (high income)",
+      "rationale": "High earner, limited time. Tests RAG drift: must NOT give Palo Alto $3M+. Property max set to $2M.",
+      "input": {
+        "user": {
+          "personal": {"age": 38},
+          "location": {"region": "BAY_AREA", "city": "Redwood City"},
+          "financial": {"income": 35000, "expenses": 12000, "monthly_debt": 2000, "savings": 600000, "currency": "USD"},
+          "professional": {"sector": "Healthcare", "profession": "Oncologist", "employment_status": "full-time", "interests": ["investing", "real estate"], "prior_experience": "No business experience", "weekly_hours": "5-15"},
+          "preferences": {"risk_profile": "medium", "horizon": "5-8"}
+        },
+        "config": {
+          "business": {"loan_amount": 150000, "loan_years": 7, "savings_to_use": 100000, "interest_rate": 0.07},
+          "real_estate": {"loan_amount": 800000, "loan_years": 30, "savings_to_use": 200000, "interest_rate": 0.055},
+          "stock": {"loan_amount": 100000, "loan_years": 0, "savings_to_use": 300000, "interest_rate": 0.08}
+        }
+      },
+      "expected": {
+        "winner_agent": ["stock", "real_estate"],
+        "business_type": ["ecommerce", "passive_income", "services"],
+        "business_status": ["profitable", "marginal", "not_profitable"],
+        "real_estate_status": ["profitable", "marginal", "not_profitable", "rejected"],
+        "stock_status": ["profitable", "marginal"],
+        "property_value_max_usd": 2000000,
+        "no_palo_alto_drift": true
+      }
+    },
+    {
+      "id": "sw_engineer_sf",
+      "name": "Software Engineer — San Francisco",
+      "rationale": "30+h labor, low savings ($80k). Tests California-specific tech_role/equity (FAANG RSU). RE likely rejected/marginal.",
+      "input": {
+        "user": {
+          "personal": {"age": 28},
+          "location": {"region": "BAY_AREA", "city": "San Francisco"},
+          "financial": {"income": 15000, "expenses": 5000, "monthly_debt": 800, "savings": 80000, "currency": "USD"},
+          "professional": {"sector": "Technology", "profession": "Software Engineer", "employment_status": "full-time", "interests": ["programming", "investing"], "prior_experience": "5 years in tech", "weekly_hours": "30+", "tech_role": "Software Engineer", "equity_compensation": "RSU (Restricted Stock Units)", "company_stage": "Big Tech / FAANG"},
+          "preferences": {"risk_profile": "high", "horizon": "5-8"}
+        },
+        "config": {
+          "business": {"loan_amount": 50000, "loan_years": 5, "savings_to_use": 20000, "interest_rate": 0.08},
+          "real_estate": {"loan_amount": 400000, "loan_years": 30, "savings_to_use": 60000, "interest_rate": 0.06},
+          "stock": {"loan_amount": 30000, "loan_years": 0, "savings_to_use": 30000, "interest_rate": 0.085}
+        }
+      },
+      "expected": {
+        "winner_agent": ["business", "stock", "real_estate"],
+        "business_type": ["services", "ecommerce", "saas", "passive_income"],
+        "business_status": ["profitable", "marginal", "not_profitable"],
+        "real_estate_status": ["rejected", "marginal", "not_profitable", "profitable"],
+        "stock_status": ["profitable", "marginal"],
+        "no_palo_alto_drift": true
+      }
+    },
+    {
+      "id": "retired_sacramento",
+      "name": "Retired Couple — Sacramento",
+      "rationale": "0h labor, conservative. Tests business disabled (loan=0) + conservative recommendations.",
+      "input": {
+        "user": {
+          "personal": {"age": 67},
+          "location": {"region": "SACRAMENTO", "city": "Sacramento"},
+          "financial": {"income": 4500, "expenses": 3000, "monthly_debt": 200, "savings": 400000, "currency": "USD"},
+          "professional": {"sector": "Other", "profession": "Retired", "employment_status": "retired", "interests": ["investing", "real estate"], "prior_experience": "30 years engineer", "weekly_hours": "0-5"},
+          "preferences": {"risk_profile": "low", "horizon": "3-5"}
+        },
+        "config": {
+          "business": {"loan_amount": 0, "loan_years": 0, "savings_to_use": 0, "interest_rate": 0},
+          "real_estate": {"loan_amount": 200000, "loan_years": 15, "savings_to_use": 150000, "interest_rate": 0.055},
+          "stock": {"loan_amount": 0, "loan_years": 0, "savings_to_use": 200000, "interest_rate": 0}
+        }
+      },
+      "expected": {
+        "winner_agent": ["real_estate", "stock"],
+        "business_status": ["rejected", "not_profitable", "?"],
+        "real_estate_status": ["profitable", "marginal", "not_profitable"],
+        "stock_status": ["profitable", "marginal"],
+        "no_palo_alto_drift": true
+      }
+    },
+    {
+      "id": "startup_founder_sf",
+      "name": "Startup Founder — San Francisco",
+      "rationale": "30+h, tech sector, founder equity, seed stage. Tests CA-specific reasoning with non-FAANG path.",
+      "input": {
+        "user": {
+          "personal": {"age": 32},
+          "location": {"region": "BAY_AREA", "city": "Palo Alto"},
+          "financial": {"income": 8000, "expenses": 4000, "monthly_debt": 500, "savings": 50000, "currency": "USD"},
+          "professional": {"sector": "Technology", "profession": "Founder/CEO", "employment_status": "self-employed", "interests": ["technology", "investing"], "prior_experience": "Sold prev startup", "weekly_hours": "30+", "tech_role": "Tech Executive (VP/CTO/CEO)", "equity_compensation": "Founder Stock", "company_stage": "Seed Stage Startup"},
+          "preferences": {"risk_profile": "high", "horizon": "5-8"}
+        },
+        "config": {
+          "business": {"loan_amount": 40000, "loan_years": 5, "savings_to_use": 15000, "interest_rate": 0.09},
+          "real_estate": {"loan_amount": 0, "loan_years": 0, "savings_to_use": 0, "interest_rate": 0},
+          "stock": {"loan_amount": 20000, "loan_years": 0, "savings_to_use": 20000, "interest_rate": 0.085}
+        }
+      },
+      "expected": {
+        "winner_agent": ["business", "stock"],
+        "business_type": ["services", "ecommerce", "saas"],
+        "business_status": ["profitable", "marginal", "not_profitable"],
+        "real_estate_status": ["rejected", "?", "not_profitable"],
+        "stock_status": ["profitable", "marginal"]
+      }
+    },
+    {
+      "id": "nurse_la",
+      "name": "Nurse — Los Angeles",
+      "rationale": "15-30h moderate, mid income. Tests balanced recommendation across 3 strategies.",
+      "input": {
+        "user": {
+          "personal": {"age": 35},
+          "location": {"region": "LOS_ANGELES", "city": "Long Beach"},
+          "financial": {"income": 7000, "expenses": 4000, "monthly_debt": 1000, "savings": 90000, "currency": "USD"},
+          "professional": {"sector": "Healthcare", "profession": "Registered Nurse", "employment_status": "full-time", "interests": ["fitness", "cooking", "investing"], "prior_experience": "10 years RN", "weekly_hours": "15-30"},
+          "preferences": {"risk_profile": "medium", "horizon": "5-8"}
+        },
+        "config": {
+          "business": {"loan_amount": 60000, "loan_years": 7, "savings_to_use": 25000, "interest_rate": 0.075},
+          "real_estate": {"loan_amount": 350000, "loan_years": 30, "savings_to_use": 50000, "interest_rate": 0.055},
+          "stock": {"loan_amount": 0, "loan_years": 0, "savings_to_use": 40000, "interest_rate": 0}
+        }
+      },
+      "expected": {
+        "winner_agent": ["business", "real_estate", "stock"],
+        "business_type": ["services", "ecommerce", "passive_income"],
+        "business_status": ["profitable", "marginal", "not_profitable"],
+        "real_estate_status": ["profitable", "marginal", "not_profitable", "rejected", "?"],
+        "stock_status": ["profitable", "marginal"]
+      }
+    },
+    {
+      "id": "teacher_inland_empire",
+      "name": "Teacher — Inland Empire",
+      "rationale": "Low income, low savings, low risk. Tests conservative recommendation.",
+      "input": {
+        "user": {
+          "personal": {"age": 45},
+          "location": {"region": "INLAND_EMPIRE", "city": "Riverside"},
+          "financial": {"income": 4500, "expenses": 3500, "monthly_debt": 300, "savings": 40000, "currency": "USD"},
+          "professional": {"sector": "Education", "profession": "K-12 Teacher", "employment_status": "full-time", "interests": ["reading", "investing"], "prior_experience": "No business experience", "weekly_hours": "5-15"},
+          "preferences": {"risk_profile": "low", "horizon": "5-8"}
+        },
+        "config": {
+          "business": {"loan_amount": 25000, "loan_years": 5, "savings_to_use": 10000, "interest_rate": 0.08},
+          "real_estate": {"loan_amount": 200000, "loan_years": 30, "savings_to_use": 30000, "interest_rate": 0.06},
+          "stock": {"loan_amount": 0, "loan_years": 0, "savings_to_use": 25000, "interest_rate": 0}
+        }
+      },
+      "expected": {
+        "winner_agent": ["stock", "real_estate", "business"],
+        "business_status": ["profitable", "marginal", "not_profitable", "rejected"],
+        "real_estate_status": ["profitable", "marginal", "not_profitable", "rejected", "?"],
+        "stock_status": ["profitable", "marginal"]
+      }
+    },
+    {
+      "id": "film_producer_la",
+      "name": "Film Producer — Los Angeles",
+      "rationale": "Entertainment sector, freelancer, high savings. Tests entertainment-specific reasoning + above-the-line.",
+      "input": {
+        "user": {
+          "personal": {"age": 41},
+          "location": {"region": "LOS_ANGELES", "city": "West Hollywood"},
+          "financial": {"income": 18000, "expenses": 10000, "monthly_debt": 2000, "savings": 300000, "currency": "USD"},
+          "professional": {"sector": "Entertainment", "profession": "Producer", "employment_status": "freelancer", "interests": ["art", "music", "investing"], "prior_experience": "15 years industry", "weekly_hours": "30+", "entertainment_role": "Above-the-line (Writer/Director/Producer)"},
+          "preferences": {"risk_profile": "high", "horizon": "5-8"}
+        },
+        "config": {
+          "business": {"loan_amount": 100000, "loan_years": 7, "savings_to_use": 50000, "interest_rate": 0.075},
+          "real_estate": {"loan_amount": 500000, "loan_years": 30, "savings_to_use": 150000, "interest_rate": 0.055},
+          "stock": {"loan_amount": 50000, "loan_years": 0, "savings_to_use": 100000, "interest_rate": 0.085}
+        }
+      },
+      "expected": {
+        "winner_agent": ["stock", "real_estate", "business"],
+        "business_status": ["profitable", "marginal", "not_profitable"],
+        "real_estate_status": ["profitable", "marginal", "not_profitable", "rejected"],
+        "stock_status": ["profitable", "marginal"]
+      }
+    }
+  ]
+}
