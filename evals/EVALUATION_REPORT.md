@@ -1,6 +1,6 @@
 # CaliforniaCFO Evaluation Report
 
-**Generated:** 2026-05-20 07:03:29  
+**Generated:** 2026-05-20 19:08:43  
 **Backend:** `http://localhost:8000`  
 **Profiles run:** 8  
 **Successful:** 8 / 8  
@@ -13,9 +13,9 @@
 | **Overall Status Accuracy (3 agents avg)** | 95.8% | ≥ 75% |
 | **Business Type Adherence** (hours-aware filtering) | 100.0% | ≥ 90% |
 | **RAG Drift Pass Rate** (no Palo Alto $3M+ anti-pattern) | 100.0% | 100% |
-| **Mean Latency** | 35.0s | ≤ 60s |
-| **P95 Latency** | 59.9s | ≤ 90s |
-| **Avg Cost per Request** | $0.1414 | ≤ $0.20 |
+| **Mean Latency** | 24.3s | ≤ 60s |
+| **P95 Latency** | 37.2s | ≤ 90s |
+| **Avg Cost per Request** | $0.1424 | ≤ $0.20 |
 
 ## Per-Agent Status Accuracy
 
@@ -29,27 +29,27 @@
 
 | Metric | Value |
 |---|---|
-| Latency mean | 35.03s |
-| Latency p50 | 37.45s |
-| Latency p95 | 59.87s |
-| Latency max | 62.24s |
+| Latency mean | 24.34s |
+| Latency p50 | 21.59s |
+| Latency p95 | 37.19s |
+| Latency max | 41.65s |
 | Total input tokens | 81,657 |
-| Total output tokens | 59,060 |
-| Total cost | $1.1310 |
-| Cost per request | $0.1414 |
+| Total output tokens | 59,618 |
+| Total cost | $1.1390 |
+| Cost per request | $0.1424 |
 
 ## Per-Profile Results
 
 | Profile | Winner | Biz Status | RE Status | Stock Status | Drift | Latency | Cost |
 |---|---|---|---|---|---|---|---|
-| Truck Driver — San Diego | ✓ stock | ✓ not_profitable | ✓ marginal | ✓ profitable | ✓ | 41.6s | $0.1524 |
-| Doctor — Bay Area (high income) | ✓ stock | ✓ not_profitable | ✓ not_profitable | ✓ profitable | ✓ | 15.9s | $0.1566 |
-| Software Engineer — San Francisco | ✓ business | ✓ marginal | ✗ ? | ✓ marginal | ✓ | 40.1s | $0.1277 |
-| Retired Couple — Sacramento | ✓ stock | ✓ not_profitable | ✓ marginal | ✓ profitable | ✓ | 34.8s | $0.1503 |
-| Startup Founder — San Francisco | ✓ stock | ✓ not_profitable | ✓ ? | ✓ marginal | ✓ | 15.8s | $0.1335 |
-| Nurse — Los Angeles | ✓ stock | ✓ marginal | ✓ ? | ✓ profitable | ✓ | 14.3s | $0.1302 |
-| Teacher — Inland Empire | ✓ stock | ✓ not_profitable | ✓ ? | ✓ profitable | ✓ | 55.5s | $0.1291 |
-| Film Producer — Los Angeles | ✓ business | ✓ profitable | ✓ not_profitable | ✓ marginal | ✓ | 62.2s | $0.1510 |
+| Truck Driver — San Diego | ✓ stock | ✓ not_profitable | ✓ marginal | ✓ profitable | ✓ | 19.3s | $0.1531 |
+| Doctor — Bay Area (high income) | ✓ stock | ✓ not_profitable | ✓ not_profitable | ✓ profitable | ✓ | 22.5s | $0.1560 |
+| Software Engineer — San Francisco | ✓ stock | ✓ not_profitable | ✗ ? | ✓ marginal | ✓ | 18.7s | $0.1338 |
+| Retired Couple — Sacramento | ✓ stock | ✓ not_profitable | ✓ marginal | ✓ profitable | ✓ | 28.9s | $0.1490 |
+| Startup Founder — San Francisco | ✓ stock | ✓ not_profitable | ✓ ? | ✓ marginal | ✓ | 19.8s | $0.1330 |
+| Nurse — Los Angeles | ✓ stock | ✓ marginal | ✓ ? | ✓ profitable | ✓ | 20.7s | $0.1318 |
+| Teacher — Inland Empire | ✓ stock | ✓ not_profitable | ✓ ? | ✓ profitable | ✓ | 23.2s | $0.1303 |
+| Film Producer — Los Angeles | ✓ business | ✓ profitable | ✓ not_profitable | ✓ marginal | ✓ | 41.6s | $0.1522 |
 
 ## Methodology
 
