@@ -30,7 +30,7 @@ from app.agents._common import (
 from app.core.california_config import REGION_DATA
 from app.engines.inflation_engine import real_return, AgentType
 from app.rag.retriever import retrieve
-
+from app.utils.logger import log_llm_interaction
 
 # ─────────────────────────────────
 # 📚 RAG CONTEXT BUILDER
@@ -405,16 +405,56 @@ If business cannot generate enough revenue in Y1 to keep loss within 10% of capi
 # ─────────────────────────────────
 # 🤖 LLM CALL
 # ─────────────────────────────────
-async def generate_business_idea_llm(user, config: dict) -> tuple[dict, list]:
+async def generate_business_idea_llm(
+    user,
+    config: dict
+) -> tuple[dict, list]:
+
+    # 🔍 RAG context
     rag_context, rag_chunk_ids = _build_rag_context(user)
-    prompt = build_prompt(user, config, rag_context=rag_context)
+
+    # 🧠 Prompt
+    prompt = build_prompt(
+        user=user,
+        config=config,
+        rag_context=rag_context
+    )
+
+    # 🎯 mode detection
     mode = _detect_mode(config)
     agent_name = f"business_{mode}"
-    response = await call_llm_with_retry(
-        llm_call=lambda: call_llm(prompt),
-        agent_name=agent_name
-    )
-    return response, rag_chunk_ids
+
+    try:
+        # 🤖 LLM call
+        response = await call_llm_with_retry(
+            llm_call=lambda: call_llm(prompt),
+            agent_name=agent_name
+        )
+
+        # 📝 logging
+        log_llm_interaction(
+            agent=agent_name,
+            prompt=prompt,
+            raw_response=str(response),
+            parsed_response=response,
+            success=True
+        )
+
+        return response, rag_chunk_ids
+
+    except Exception as e:
+
+        # ❌ error logging
+        log_llm_interaction(
+            agent=agent_name,
+            prompt=prompt,
+            raw_response="",
+            parsed_response=None,
+            success=False,
+            error=str(e)
+        )
+
+        raise
 
 
 # ─────────────────────────────────

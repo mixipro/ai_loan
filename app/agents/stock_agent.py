@@ -27,7 +27,7 @@ from app.agents._common import (
 from app.core.california_config import REGION_DATA
 from app.engines.inflation_engine import real_return, AgentType
 from app.rag.retriever import retrieve
-
+from app.utils.logger import log_llm_interaction
 
 # ─────────────────────────────────
 # 📚 RAG CONTEXT BUILDER
@@ -72,29 +72,29 @@ STRATEGY_TYPE_DEFAULTS = {
     },
     "dividend_focused": {
         "blended_return_pct": 7.0,
-        "dividend_yield_pct": 3.5,        # Higher yield
+        "dividend_yield_pct": 3.5,  # Higher yield
         "expense_ratio_pct": 0.08,
-        "volatility_pct": 12,             # Lower volatility
+        "volatility_pct": 12,  # Lower volatility
         "expected_return_typical": 0.07,
     },
     "tech_growth": {
-        "blended_return_pct": 12.0,       # Higher return
-        "dividend_yield_pct": 0.5,        # Low yield
-        "expense_ratio_pct": 0.20,        # QQQ etc.
-        "volatility_pct": 22,             # Higher volatility
+        "blended_return_pct": 12.0,  # Higher return
+        "dividend_yield_pct": 0.5,  # Low yield
+        "expense_ratio_pct": 0.20,  # QQQ etc.
+        "volatility_pct": 22,  # Higher volatility
         "expected_return_typical": 0.10,
     },
     "reit_etf": {
         "blended_return_pct": 8.0,
-        "dividend_yield_pct": 4.0,        # REITs pay high dividends
+        "dividend_yield_pct": 4.0,  # REITs pay high dividends
         "expense_ratio_pct": 0.12,
         "volatility_pct": 18,
         "expected_return_typical": 0.075,
     },
     "covered_call": {
         "blended_return_pct": 8.5,
-        "dividend_yield_pct": 6.5,        # Premium income
-        "expense_ratio_pct": 0.35,        # Active strategy
+        "dividend_yield_pct": 6.5,  # Premium income
+        "expense_ratio_pct": 0.35,  # Active strategy
         "volatility_pct": 14,
         "expected_return_typical": 0.075,
     },
@@ -349,16 +349,57 @@ RULE 6: margin_call_risk MANDATORY if margin > 0:
 # ─────────────────────────────────
 # 🤖 LLM CALL
 # ─────────────────────────────────
-async def generate_stock_strategy_llm(user, config: dict) -> tuple[dict, list]:
+async def generate_stock_strategy_llm(
+    user,
+    config: dict
+) -> tuple[dict, list]:
+
+    # 🔍 RAG context
     rag_context, rag_chunk_ids = _build_rag_context(user)
-    prompt = build_prompt(user, config, rag_context=rag_context)
-    uses_margin = config.get("loan_amount", 0) > 0
-    agent_name = "stock_margin" if uses_margin else "stock_cash"
-    response = await call_llm_with_retry(
-        llm_call=lambda: call_llm(prompt),
-        agent_name=agent_name
+
+    # 🧠 Prompt
+    prompt = build_prompt(
+        user=user,
+        config=config,
+        rag_context=rag_context
     )
-    return response, rag_chunk_ids
+
+    # 💰 margin detection
+    uses_margin = config.get("loan_amount", 0) > 0
+
+    agent_name = "stock_margin" if uses_margin else "stock_cash"
+
+    try:
+        # 🤖 LLM call
+        response = await call_llm_with_retry(
+            llm_call=lambda: call_llm(prompt),
+            agent_name=agent_name
+        )
+
+        # 📝 success logging
+        log_llm_interaction(
+            agent=agent_name,
+            prompt=prompt,
+            raw_response=str(response),
+            parsed_response=response,
+            success=True
+        )
+
+        return response, rag_chunk_ids
+
+    except Exception as e:
+
+        # ❌ error logging
+        log_llm_interaction(
+            agent=agent_name,
+            prompt=prompt,
+            raw_response="",
+            parsed_response=None,
+            success=False,
+            error=str(e)
+        )
+
+        raise
 
 
 # ─────────────────────────────────
@@ -485,9 +526,9 @@ def _validate_market_context(data: dict) -> dict:
 
 
 def _recompute_projections(
-    data: dict,
-    portfolio_comp: dict,
-    config: dict,
+        data: dict,
+        portfolio_comp: dict,
+        config: dict,
 ) -> dict:
     """Recompute Y1/Y3/Y5 from portfolio composition + margin cost."""
     loan_amount = config.get("loan_amount", 0)
@@ -707,13 +748,14 @@ def _build_allocation_from_composition(portfolio_comp: dict, target_total: float
 
     return allocation
 
+
 # ─────────────────────────────────
 # ⭐ v5.2 NEW — DERIVED RETURN + STATUS + CALC BREAKDOWN
 # ─────────────────────────────────
 def _derive_expected_return_from_projections(
-    projections: dict,
-    total_capital: float,
-    type_value: str,
+        projections: dict,
+        total_capital: float,
+        type_value: str,
 ) -> float:
     """Average net_return over Y1-Y3 / capital, capped at type-typical max."""
     if total_capital <= 0:
@@ -809,14 +851,14 @@ def _determine_status_from_projections(
 
 
 def _build_calculation_breakdown(
-    user,
-    config: dict,
-    portfolio_comp: dict,
-    market_ctx: dict,
-    projections: dict,
-    margin_call_risk: dict,
-    expected_return: float,
-    total_capital: float,
+        user,
+        config: dict,
+        portfolio_comp: dict,
+        market_ctx: dict,
+        projections: dict,
+        margin_call_risk: dict,
+        expected_return: float,
+        total_capital: float,
 ) -> dict:
     """Step-by-step transparent calculation for stocks."""
     loan_amount = config.get("loan_amount", 0)

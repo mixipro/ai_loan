@@ -17,6 +17,7 @@ from app.agents._common import (
 from app.core.california_config import REGION_DATA, get_city_real_estate_data
 from app.engines.inflation_engine import real_return, AgentType
 from app.rag.retriever import retrieve
+from app.utils.logger import log_llm_interaction
 
 
 def _build_rag_context(user) -> tuple[str, list]:
@@ -104,8 +105,8 @@ def _calculate_loan_payment(loan_amount: float, rate: float, years: int) -> dict
     months = years * 12
     monthly_rate = rate / 12
     monthly_payment = (
-        loan_amount * monthly_rate * ((1 + monthly_rate) ** months) /
-        (((1 + monthly_rate) ** months) - 1)
+            loan_amount * monthly_rate * ((1 + monthly_rate) ** months) /
+            (((1 + monthly_rate) ** months) - 1)
     )
     annual_payment = monthly_payment * 12
     total_paid = monthly_payment * months
@@ -508,14 +509,56 @@ RULE 6: Scenarios MUST include realistic California risks:
 """
 
 
-async def generate_real_estate_strategy_llm(user, config: dict) -> tuple[dict, list]:
+# ─────────────────────────
+# 🏠 GENERATE REAL ESTATE STRATEGY
+# ─────────────────────────
+async def generate_real_estate_strategy_llm(
+        user,
+        config: dict
+) -> tuple[dict, list]:
+    # 🔍 RAG context
     rag_context, rag_chunk_ids = _build_rag_context(user)
-    prompt = build_prompt(user, config, rag_context=rag_context)
-    response = await call_llm_with_retry(
-        llm_call=lambda: call_llm(prompt),
-        agent_name="real_estate"
+
+    # 🧠 Prompt
+    prompt = build_prompt(
+        user=user,
+        config=config,
+        rag_context=rag_context
     )
-    return response, rag_chunk_ids
+
+    agent_name = "real_estate"
+
+    try:
+        # 🤖 LLM call
+        response = await call_llm_with_retry(
+            llm_call=lambda: call_llm(prompt),
+            agent_name=agent_name
+        )
+
+        # 📝 success logging
+        log_llm_interaction(
+            agent=agent_name,
+            prompt=prompt,
+            raw_response=str(response),
+            parsed_response=response,
+            success=True
+        )
+
+        return response, rag_chunk_ids
+
+    except Exception as e:
+
+        # ❌ error logging
+        log_llm_interaction(
+            agent=agent_name,
+            prompt=prompt,
+            raw_response="",
+            parsed_response=None,
+            success=False,
+            error=str(e)
+        )
+
+        raise
 
 
 def _rescale_allocation_to_capital(allocation: dict, target_total: float) -> dict:
@@ -578,7 +621,8 @@ def _validate_property_economics(data: dict, total_value: float, down_payment: f
         "monthly_rent_usd": round(monthly_rent, 2),
         "annual_rental_income_usd": round(annual_rent, 2),
         "vacancy_rate_pct": round(clamp(pe.get("vacancy_rate_pct"), 0, 100, defaults["vacancy_pct"]), 1),
-        "expected_annual_appreciation_pct": round(clamp(pe.get("expected_annual_appreciation_pct"), -10, 15, defaults["appreciation_pct"]), 2),
+        "expected_annual_appreciation_pct": round(
+            clamp(pe.get("expected_annual_appreciation_pct"), -10, 15, defaults["appreciation_pct"]), 2),
         "is_rental": bool(pe.get("is_rental", defaults["is_rental"])),
         "is_flip": bool(pe.get("is_flip", defaults["is_flip"])),
     }
@@ -672,7 +716,8 @@ def _validate_break_even(data: dict, projections: dict, down_payment: float) -> 
     be = data.get("break_even") or {}
 
     if down_payment <= 0:
-        return {"years_to_breakeven": 0, "cumulative_cash_flow_breakeven_year": 0, "explanation": "Break-even N/A (no down payment)."}
+        return {"years_to_breakeven": 0, "cumulative_cash_flow_breakeven_year": 0,
+                "explanation": "Break-even N/A (no down payment)."}
 
     y1 = projections.get("year_1", {})
     y3 = projections.get("year_3", {})
@@ -739,7 +784,7 @@ def _determine_status_from_projections(projections: dict, down_payment: float) -
 
 
 def _build_calculation_breakdown(user, config: dict, property_econ: dict, projections: dict,
-                                   type_value: str, expected_return: float, total_capital: float) -> dict:
+                                 type_value: str, expected_return: float, total_capital: float) -> dict:
     loan_amount = config.get("loan_amount", 0)
     savings_to_use = config.get("savings_to_use", 0)
     interest_rate = config.get("interest_rate", 0)
@@ -881,7 +926,7 @@ def _build_calculation_breakdown(user, config: dict, property_econ: dict, projec
             conclusion = (
                 f"✅ This is a viable rental investment.\n\n"
                 f"📊 By Year 3, you'll have:\n"
-                f"• Monthly cash flow: ${y3_cash/12:+,.0f}/month\n"
+                f"• Monthly cash flow: ${y3_cash / 12:+,.0f}/month\n"
                 f"• Total annual return: ${y3_total:,.0f} ({y3_roi * 100:.1f}% of capital)\n"
                 f"• Equity buildup from appreciation + principal paydown"
             )
@@ -981,13 +1026,15 @@ def validate_real_estate_output(data: dict, user=None, config: dict = None) -> d
     scenarios = _validate_scenarios(data, derived_return)
     break_even = _validate_break_even(data, projections, savings_to_use)
     market_context = _validate_property_market_context(data, median_home_price)
-    calc_breakdown = _build_calculation_breakdown(user, config or {}, property_econ, projections, type_value, derived_return, total_capital)
+    calc_breakdown = _build_calculation_breakdown(user, config or {}, property_econ, projections, type_value,
+                                                  derived_return, total_capital)
 
     return {
         "agent": "real_estate",
         "title": safe_str(data.get("title"), "Direct Property Investment"),
         "type": type_value,
-        "description": safe_str(data.get("description"), "A California direct property strategy with Prop 13 tax benefits."),
+        "description": safe_str(data.get("description"),
+                                "A California direct property strategy with Prop 13 tax benefits."),
         "allocation": rescaled_alloc,
         "expected_return": derived_return,
         "risk": risk_value,

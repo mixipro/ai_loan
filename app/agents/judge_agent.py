@@ -20,6 +20,7 @@ import logging
 from app.services.llm_service import call_llm_text as call_llm
 from app.agents._common import parse_llm_json, safe_str, safe_list, call_llm_with_retry
 from app.core.california_config import REGION_DATA
+from app.utils.logger import log_llm_interaction
 
 logger = logging.getLogger(__name__)
 
@@ -540,13 +541,36 @@ def build_comparison_charts(strategies: list) -> dict:
 # ─────────────────────────────────
 # 🤖 GENERATE EXPLANATION (v5.2.1)
 # ─────────────────────────────────
-async def generate_explanation(user, loan: dict, all_strategies: list, chosen: dict) -> dict:
-    prompt = build_explanation_prompt(user, loan, all_strategies, chosen)
+async def generate_explanation(
+    user,
+    loan: dict,
+    all_strategies: list,
+    chosen: dict
+) -> dict:
+
+    prompt = build_explanation_prompt(
+        user,
+        loan,
+        all_strategies,
+        chosen
+    )
+
+    agent_name = "judge"
 
     try:
+        # 🤖 LLM call
         data = await call_llm_with_retry(
             llm_call=lambda: call_llm(prompt),
-            agent_name="judge"
+            agent_name=agent_name
+        )
+
+        # 📝 success logging
+        log_llm_interaction(
+            agent=agent_name,
+            prompt=prompt,
+            raw_response=str(data),
+            parsed_response=data,
+            success=True
         )
 
         return {
@@ -562,12 +586,22 @@ async def generate_explanation(user, loan: dict, all_strategies: list, chosen: d
         }
 
     except Exception as e:
+
+        # ❌ error logging
+        log_llm_interaction(
+            agent=agent_name,
+            prompt=prompt,
+            raw_response="",
+            parsed_response=None,
+            success=False,
+            error=str(e)
+        )
+
         logger.error(f"Judge LLM failed after retries, using fallback: {e}")
 
         region = user.location.region
         region_name = REGION_DATA[region]["display_name"]
         net_return_pct = chosen.get('net_return', 0) * 100
-        net_dollars = chosen.get('net_return_dollars', 0)
         winning_tier = chosen.get("winning_tier", "unknown")
         agent_name = chosen.get("agent", "unknown")
         display_name = AGENT_DISPLAY_NAMES.get(agent_name, agent_name)
@@ -576,69 +610,112 @@ async def generate_explanation(user, loan: dict, all_strategies: list, chosen: d
         chosen_y3_comparable, _ = _get_y3_comparable_return(chosen)
 
         if winning_tier == "profitable":
+
             headline = (
-                f"{display_name} is profitable with ${chosen_y3_comparable:+,.0f} Y3 comparable return."
+                f"{display_name} is profitable with "
+                f"${chosen_y3_comparable:+,.0f} Y3 comparable return."
             )
+
             why_chosen = (
-                f"This {agent_name} strategy in {region_name} delivers consistent positive returns. "
-                f"It outperforms other available strategies on the comparable return metric."
+                f"This {agent_name} strategy in {region_name} "
+                f"delivers consistent positive returns. "
+                f"It outperforms other available strategies "
+                f"on the comparable return metric."
             )
+
         elif winning_tier == "marginal":
+
             headline = (
-                f"{display_name} is marginal at {net_return_pct:+.2f}% — best available option."
+                f"{display_name} is marginal at "
+                f"{net_return_pct:+.2f}% — best available option."
             )
+
             why_chosen = (
-                f"All strategies show only marginal returns with your current loan structure. "
+                f"All strategies show only marginal returns "
+                f"with your current loan structure. "
                 f"Consider reducing loan amounts to improve returns."
             )
+
         else:
+
             headline = (
-                f"⚠️ All strategies unprofitable. {display_name} loses the least."
+                f"⚠️ All strategies unprofitable. "
+                f"{display_name} loses the least."
             )
+
             why_chosen = (
-                f"With your current configuration, ALL strategies are unprofitable. "
-                f"STRONGLY recommend reducing loan amounts before proceeding."
+                f"With your current configuration, "
+                f"ALL strategies are unprofitable. "
+                f"STRONGLY recommend reducing loan amounts "
+                f"before proceeding."
             )
 
         comparative = ""
+
         for s in all_strategies:
+
             if s.get("rejected") or s.get("agent") == agent_name:
                 continue
+
             other_y3, _ = _get_y3_comparable_return(s)
-            other_name = AGENT_DISPLAY_NAMES.get(s.get("agent"), s.get("agent"))
-            comparative += f"{other_name}: ${other_y3:+,.0f} Y3 comparable. "
+
+            other_name = AGENT_DISPLAY_NAMES.get(
+                s.get("agent"),
+                s.get("agent")
+            )
+
+            comparative += (
+                f"{other_name}: "
+                f"${other_y3:+,.0f} Y3 comparable. "
+            )
 
         return {
             "headline": headline,
+
             "why_chosen": why_chosen,
+
             "comparative_analysis": (
                 f"Compared to other strategies: {comparative}"
-                if comparative else
-                "Other strategies were rejected or had similar returns."
+                if comparative
+                else "Other strategies were rejected or had similar returns."
             ),
+
             "risk_analysis": (
                 f"Worst-case scenario shows potential downside. "
-                f"Risk: {chosen.get('risk', 0.5):.2f}, Stability: {chosen.get('stability', 0.5):.2f}."
+                f"Risk: {chosen.get('risk', 0.5):.2f}, "
+                f"Stability: {chosen.get('stability', 0.5):.2f}."
             ),
+
             "california_angle": (
-                f"California-specific factors apply: state tax up to 13.3%, "
+                f"California-specific factors apply: "
+                f"state tax up to 13.3%, "
                 f"region-specific factors for {region_name}."
             ),
+
             "action_plan": (
-                    chosen.get("next_steps", [])[:3] or
-                    ["Reduce loan amount", "Re-run analysis", "Consult advisor"]
+                chosen.get("next_steps", [])[:3]
+                or [
+                    "Reduce loan amount",
+                    "Re-run analysis",
+                    "Consult advisor"
+                ]
             ),
+
             "reasoning": why_chosen,
+
             "next_step": (
-                chosen.get('next_steps', ['Reduce loan amount and re-run analysis.'])[0]
-                if chosen.get('next_steps') else
-                "Reduce loan amount and re-run analysis."
+                chosen.get(
+                    'next_steps',
+                    ['Reduce loan amount and re-run analysis.']
+                )[0]
+                if chosen.get('next_steps')
+                else "Reduce loan amount and re-run analysis."
             ),
-            "comparison": f"Strategies ranked by tier, then score.",
+
+            "comparison": "Strategies ranked by tier, then score.",
+
             "llm_error": str(e)
         }
-
-
 # ─────────────────────────────────
 # 🚀 MAIN (v5.2.1)
 # ─────────────────────────────────
