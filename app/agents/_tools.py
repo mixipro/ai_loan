@@ -1,8 +1,8 @@
 # app/agents/_tools.py
 
 """
-Function calling tools za agente.
-Koriste se SAMO u stock_agent (deterministička ETF alokacija).
+Function calling tools for agents.
+Used ONLY in stock_agent (deterministic ETF allocation).
 """
 
 
@@ -12,15 +12,16 @@ Koriste se SAMO u stock_agent (deterministička ETF alokacija).
 
 def calculate_stock_allocation(risk_profile: str, horizon: str) -> dict:
     """
-    Računa ETF allocation prema risk profilu i investicionom horizontu.
-    Vraća procente diversifikovanih ETF-ova.
+    Calculates ETF allocation based on risk profile and investment horizon.
+
+    Returns percentages of diversified ETFs.
 
     Args:
-        risk_profile: low | medium | high
-        horizon: 1-3 | 3-5 | 5-8 | 8+ (godine)
+    risk_profile: low | medium | high
+    horizon: 1-3 | 3-5 | 5-8 | 8+ (years)
 
     Returns:
-        Dict sa ticker:procenat parovima
+    Dict with ticker:percentage pairs
     """
     risk = risk_profile.lower()
 
@@ -106,8 +107,8 @@ def calculate_stock_allocation(risk_profile: str, horizon: str) -> dict:
 
 def calculate_expected_return(risk_profile: str, horizon: str) -> dict:
     """
-    Računa očekivani prinos i risk/stability metrike za stock portfolio.
-    Bazirano na istorijskim podacima ETF-ova.
+    Calculates expected return and risk/stability metrics for a stock portfolio.
+    Based on historical ETF data.
     """
     risk = risk_profile.lower()
 
@@ -212,7 +213,7 @@ TOOL_REGISTRY = {
 
 
 def execute_tool(tool_name: str, arguments: dict) -> dict:
-    """Izvršava tool po imenu sa argumentima."""
+    """Executes the tool by name with arguments."""
     if tool_name not in TOOL_REGISTRY:
         return {"error": f"Unknown tool: {tool_name}"}
 

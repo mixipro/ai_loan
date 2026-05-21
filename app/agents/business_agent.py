@@ -32,6 +32,7 @@ from app.engines.inflation_engine import real_return, AgentType
 from app.rag.retriever import retrieve
 from app.utils.logger import log_llm_interaction
 
+
 # ─────────────────────────────────
 # 📚 RAG CONTEXT BUILDER
 # ─────────────────────────────────
@@ -83,7 +84,6 @@ HOURS_RETURN_CAP = {
 HORIZON_RETURN_MODIFIER = {
     "1-3": 1.20, "3-5": 1.10, "5-8": 1.00, "8+": 0.85,
 }
-
 
 # ─────────────────────────────────
 # ⭐ v5.2.5 — BUSINESS TYPE TAXONOMY
@@ -200,8 +200,8 @@ def _calculate_loan_payment(loan_amount: float, rate: float, years: int) -> dict
     months = years * 12
     monthly_rate = rate / 12
     monthly_payment = (
-        loan_amount * monthly_rate * ((1 + monthly_rate) ** months) /
-        (((1 + monthly_rate) ** months) - 1)
+            loan_amount * monthly_rate * ((1 + monthly_rate) ** months) /
+            (((1 + monthly_rate) ** months) - 1)
     )
     annual_payment = monthly_payment * 12
     total_paid = monthly_payment * months
@@ -406,10 +406,9 @@ If business cannot generate enough revenue in Y1 to keep loss within 10% of capi
 # 🤖 LLM CALL
 # ─────────────────────────────────
 async def generate_business_idea_llm(
-    user,
-    config: dict
+        user,
+        config: dict
 ) -> tuple[dict, list]:
-
     # 🔍 RAG context
     rag_context, rag_chunk_ids = _build_rag_context(user)
 
@@ -544,7 +543,7 @@ def _recompute_projections(data: dict, unit_econ: dict, loan_payment_annual: flo
     period_mult = 12 if is_recurring else 1
 
     if units_y3 > units_y1 and units_y1 > 0:
-        growth_rate = (units_y3 / units_y1) ** (1/2) - 1
+        growth_rate = (units_y3 / units_y1) ** (1 / 2) - 1
         units_y5 = int(units_y3 * ((1 + growth_rate * 0.5) ** 2))
     else:
         units_y5 = int(units_y3 * 1.5)
@@ -641,9 +640,9 @@ def _validate_break_even(data: dict, unit_econ: dict) -> dict:
 # ⭐ v5.2 — DERIVED EXPECTED RETURN
 # ─────────────────────────────────
 def _derive_expected_return_from_projections(
-    projections: dict,
-    total_capital: float,
-    max_return: float,
+        projections: dict,
+        total_capital: float,
+        max_return: float,
 ) -> float:
     if total_capital <= 0:
         return 0.0
@@ -656,8 +655,8 @@ def _derive_expected_return_from_projections(
 # ⭐ v5.2.1 — STRICT STATUS LOGIC
 # ─────────────────────────────────
 def _determine_status_from_projections(
-    projections: dict,
-    total_capital: float,
+        projections: dict,
+        total_capital: float,
 ) -> str:
     """
     Strict status logic — v5.2.1:
@@ -691,8 +690,8 @@ def _determine_status_from_projections(
 # ⭐ v5.2 — TRANSPARENT CALCULATION BREAKDOWN
 # ─────────────────────────────────
 def _build_calculation_breakdown(
-    user, config: dict, projections: dict, expected_return: float,
-    annual_loan_payment: float, total_capital: float,
+        user, config: dict, projections: dict, expected_return: float,
+        annual_loan_payment: float, total_capital: float,
 ) -> dict:
     loan_amount = config.get("loan_amount", 0)
     savings_to_use = config.get("savings_to_use", 0)

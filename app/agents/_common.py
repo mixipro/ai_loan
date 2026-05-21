@@ -24,7 +24,7 @@ def clean_llm_json(raw: str) -> str:
 
 
 def extract_json_from_text(text: str) -> str:
-    """Vadi JSON region (od { do }) iz teksta."""
+    """Extracts the JSON region (from { to }) from the text."""
     start = text.find('{')
     end = text.rfind('}')
     if start != -1 and end != -1 and end > start:
@@ -34,17 +34,17 @@ def extract_json_from_text(text: str) -> str:
 
 def parse_llm_json(raw: str) -> dict:
     """
-    Parsira LLM output kao JSON, sa cleanup-om i fallback ekstrakcijom.
+    Parses LLM output as JSON, with cleanup and fallback extraction.
     """
     cleaned = clean_llm_json(raw)
 
-    # Pokušaj 1: direktan parse
+    # Attempt 1: direct parse
     try:
         return json.loads(cleaned)
     except json.JSONDecodeError:
         pass
 
-    # Pokušaj 2: ekstraktuj JSON region
+    # Attempt 2: extract the JSON region
     try:
         extracted = extract_json_from_text(cleaned)
         return json.loads(extracted)
@@ -58,23 +58,22 @@ def parse_llm_json(raw: str) -> dict:
     )
 
 
-# ⭐ NOVA FUNKCIJA — retry wrapper za LLM + parsing
 async def call_llm_with_retry(
         llm_call: Callable[[], Awaitable[str]],
         agent_name: str = "unknown"
 ) -> dict:
     """
-    Poziva LLM funkciju sa retry-jem ako JSON parsing padne.
+    Calls LLM function with retry if JSON parsing fails.
 
     Args:
-        llm_call: async funkcija koja vraća raw LLM output (string)
-        agent_name: ime agenta za logging
+    llm_call: async function that returns raw LLM output (string)
+    agent_name: name of the logging agent
 
     Returns:
-        Parsed JSON dict
+    Parsed JSON dict
 
     Raises:
-        ValueError: ako svi pokušaji propadnu
+    ValueError: if all attempts fail
     """
     last_error = None
     last_raw = None
@@ -137,8 +136,8 @@ def safe_dict(value: Any, default: dict = None) -> dict:
 
 def validate_allocation(allocation: dict, total_capital: float, agent_name: str) -> dict:
     """
-    Proverava da li je allocation suma razumna.
-    Ako su sve vrednosti 0 ili suma ne odgovara kapitalu → loguj upozorenje.
+    Checks if the allocation sum is reasonable.
+    If all values ​​are 0 or the sum does not correspond to the capital → log a warning.
     """
     if not allocation:
         return allocation
@@ -184,14 +183,14 @@ async def call_llm_with_tools(
         max_tool_rounds: int = 3
 ) -> dict:
     """
-    Poziva LLM sa function calling support-om.
+    Calls LLM with function calling support.
 
     Flow:
-    1. Pošalji LLM-u prompt + dostupne tools
-    2. Ako LLM hoće da pozove tool → izvrši ga
-    3. Pošalji rezultat tool-a nazad LLM-u
-    4. Ponavljaj dok LLM ne vrati final answer (bez tool_calls)
-    5. Parsira finalni JSON
+    1. Send LLM prompt + available tools
+    2. If LLM wants to call the tool → execute it
+    3. Send the result of the tool back to LLM
+    4. Repeat until LLM returns the final answer (without tool_calls)
+    5. Parse the final JSON
     """
     messages = [
         {

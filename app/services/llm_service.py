@@ -27,16 +27,16 @@ async def call_llm(
         messages: Optional[List[dict]] = None,
 ) -> dict:
     """
-    Asinhroni poziv OpenRouter API-ja sa opcionalnim tools support-om.
+    Asynchronous OpenRouter API call with optional tools support.
 
     Args:
-        prompt: User prompt (used if messages not provided)
-        tools: Optional list of function calling tool schemas
-        messages: Optional pre-built message list (for tool result follow-ups)
+    prompt: User prompt (used if messages not provided)
+    tools: Optional list of function calling tool schemas
+    messages: Optional pre-built message list (for tool result follow-ups)
 
     Returns:
-        FULL response dict from API.
-        Caller treba da pristupi response["choices"][0]["message"] za content/tool_calls.
+    FULL response dict from API.
+    Caller should access response["choices"][0]["message"] for content/tool_calls.
     """
     if not OPENROUTER_API_KEY:
         raise ValueError("OPENROUTER_API_KEY not set in .env")
@@ -46,7 +46,7 @@ async def call_llm(
         "Content-Type": "application/json"
     }
 
-    # Build messages ako nisu prosleđeni
+    # Build messages if not forwarded
     if messages is None:
         messages = [
             {"role": "system", "content": "You are a financial advisor AI."},
@@ -110,8 +110,8 @@ async def call_llm(
 # ─────────────────────────
 async def call_llm_text(prompt: str) -> str:
     """
-    Stara verzija — vraća samo content string.
-    Za agente koji NE koriste tools (business, real_estate, judge).
+    Old version — returns only content string.
+    For agents who do NOT use tools (business, real_estate, judge).
     """
     response = await call_llm(prompt=prompt)
     return response["choices"][0]["message"]["content"]

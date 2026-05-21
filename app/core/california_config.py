@@ -2,7 +2,7 @@
 
 """
 California regions, cities, tax brackets, and baseline data.
-Hardkodovano za stabilnost — live data dolazi preko web search tools.
+Hardcoded for stability — live data comes via web search tools.
 """
 
 from enum import Enum

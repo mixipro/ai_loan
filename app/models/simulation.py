@@ -6,32 +6,32 @@ from app.models.user import UserInput
 
 class SimulationChoice(BaseModel):
     """
-    Korisnikov izbor parametara za simulaciju.
-    Granice se validiraju u orchestrator-u (jer zavise od user-a).
+    User selection of simulation parameters.
+    Boundaries are validated in the orchestrator (because they depend on the user).
     """
     loan_amount: float = Field(
         ...,
         ge=0,
-        description="Koliko korisnik želi da uzme kredita (0 = bez kredita)"
+        description="How much credit the user wants to take (0 = no credit)"
     )
     loan_years: int = Field(
         ...,
         ge=1,
         le=15,
-        description="Broj godina za otplatu kredita"
+        description="Number of years for loan repayment"
     )
     savings_to_invest: float = Field(
         ...,
         ge=0,
-        description="Koliko od svojih ušteđevina korisnik želi da uloži"
+        description="How much of their savings the user wants to invest"
     )
 
 
 class SimulationRequest(BaseModel):
     """
-    Kombinovan request za /simulate endpoint:
-    - user: ceo originalni profil (kao u /analyze)
-    - simulation: korisnikovi custom parametri
+    Combined request for /simulate endpoint:
+    - user: entire original profile (as in /analyze)
+    - simulation: user's custom parameters
     """
     user: UserInput
     simulation: SimulationChoice

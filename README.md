@@ -35,8 +35,8 @@ ai_loan/
 │   ├── models/               # Pydantic models
 │   ├── rag/                  # FAISS + sentence-transformers
 │   └── services/             # LLM service, orchestrator
-├── frontend/                 # Legacy HTML frontend (kept as fallback)
-│   └── index.html
+├── evals/                       
+│   ├──results
 ├── frontend-react/           # ⭐ Modern React frontend
 │   ├── src/
 │   │   ├── components/
@@ -46,6 +46,7 @@ ai_loan/
 │   │   └── types/
 │   ├── package.json
 │   └── vite.config.ts
+│── logs/
 ├── Makefile                  # Unified entry point
 ├── pyproject.toml            # Python deps (uv)
 └── README.md
@@ -203,7 +204,6 @@ Example request body:
 
 **Version:** v5.2.5 — production-ready
 
-**Defense readiness:** 95%+
 
 Key validators in place:
 
