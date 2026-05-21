@@ -1,23 +1,6 @@
-"""
-Current CaliforniaCFO orchestrator tests.
-
-These replace the legacy pre-California tests. They match the current async,
-California-only, config-driven flow:
-
-    UserInput + per-strategy config
-    -> risk reporting
-    -> 3 agents
-    -> investment_engine ranking
-    -> judge selection
-
-The tests are API-safe: agent and judge calls are mocked, so no LLM tokens are used.
-"""
-
 import asyncio
 from copy import deepcopy
-
 import pytest
-
 from app.models.user import UserInput
 from app.services import orchestrator
 
@@ -87,15 +70,15 @@ def make_config() -> dict:
 
 
 def make_agent_result(
-    agent: str,
-    expected_return: float,
-    *,
-    risk: float = 0.45,
-    stability: float = 0.70,
-    funding_mode: str = "cash",
-    loan_amount: float = 0,
-    savings_used: float = 100000,
-    rejected: bool = False,
+        agent: str,
+        expected_return: float,
+        *,
+        risk: float = 0.45,
+        stability: float = 0.70,
+        funding_mode: str = "cash",
+        loan_amount: float = 0,
+        savings_used: float = 100000,
+        rejected: bool = False,
 ) -> dict:
     base = {
         "agent": agent,

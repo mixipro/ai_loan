@@ -1,14 +1,6 @@
-"""
-Tests for reusable user fixture data.
-
-Place this file at:
-    tests/fixtures/test_user_fixtures.py
-"""
-
 from app.models.analyze import AnalyzeConfig
 from app.models.user import UserInput
 from tests.fixtures import user_fixtures
-
 
 LEGACY_TOP_LEVEL_LOCATION_FIELDS = {"country"}
 LEGACY_FINANCIAL_FIELDS = {"debt"}
@@ -58,7 +50,7 @@ def test_analyze_config_fixture_is_valid_and_covers_all_strategies():
     assert config.real_estate.loan_years == 30
     assert config.stock.loan_amount <= config.stock.savings_to_use
     assert config.real_estate.savings_to_use >= 0.20 * (
-        config.real_estate.loan_amount + config.real_estate.savings_to_use
+            config.real_estate.loan_amount + config.real_estate.savings_to_use
     )
 
 

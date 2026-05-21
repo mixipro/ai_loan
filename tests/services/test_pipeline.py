@@ -1,19 +1,5 @@
-"""
-Current CaliforniaCFO deterministic pipeline tests.
-
-These replace the legacy pre-California engine pipeline tests. They validate the
-non-LLM pipeline pieces used before agent execution:
-
-    UserInput -> risk -> all loan rates -> all strategy loans
-
-They also include a small investment-engine integration check using deterministic
-mock strategies. No LLM or external API calls are made.
-"""
-
 from copy import deepcopy
-
 import pytest
-
 from app.models.user import UserInput
 from app.engines.risk_engine import calculate_risk_score
 from app.engines.interest_engine import calculate_all_loan_rates, calculate_interest_rate

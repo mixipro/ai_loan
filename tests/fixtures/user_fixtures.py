@@ -1,19 +1,7 @@
-"""
-Reusable California-only user fixtures.
-
-Place this file at:
-    tests/fixtures/user_fixtures.py
-
-These fixtures replace the legacy multi-country/EUR fixture shape.
-"""
-
 from copy import deepcopy
-
 import pytest
-
 from app.models.analyze import AnalyzeConfig
 from app.models.user import UserInput
-
 
 BAY_AREA_TECH_USER_PAYLOAD = {
     "personal": {"age": 34},
@@ -41,7 +29,6 @@ BAY_AREA_TECH_USER_PAYLOAD = {
     "preferences": {"risk_profile": "high", "horizon": "8+"},
 }
 
-
 SACRAMENTO_LOW_RISK_USER_PAYLOAD = {
     "personal": {"age": 48},
     "location": {"region": "SACRAMENTO", "city": "Sacramento"},
@@ -67,7 +54,6 @@ SACRAMENTO_LOW_RISK_USER_PAYLOAD = {
     },
     "preferences": {"risk_profile": "low", "horizon": "3-5"},
 }
-
 
 LOS_ANGELES_ENTERTAINMENT_USER_PAYLOAD = {
     "personal": {"age": 37},
@@ -95,13 +81,11 @@ LOS_ANGELES_ENTERTAINMENT_USER_PAYLOAD = {
     "preferences": {"risk_profile": "medium", "horizon": "5-8"},
 }
 
-
 VALID_USER_PAYLOADS = [
     BAY_AREA_TECH_USER_PAYLOAD,
     SACRAMENTO_LOW_RISK_USER_PAYLOAD,
     LOS_ANGELES_ENTERTAINMENT_USER_PAYLOAD,
 ]
-
 
 VALID_ANALYZE_CONFIG_PAYLOAD = {
     "business": {

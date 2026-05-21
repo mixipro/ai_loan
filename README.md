@@ -61,6 +61,8 @@ ai_loan/
 - **Node 20 LTS** via [`nvm`](https://github.com/nvm-sh/nvm) (recommended)
 - **OpenRouter API key** (or compatible LLM provider)
 
+### Linux setup also if you use Windows need to change Makefile
+
 ```bash
 # Install uv (if missing)
 curl -LsSf https://astral.sh/uv/install.sh | sh
@@ -212,7 +214,3 @@ Key validators in place:
 - Judge: Y3 comparable-return unified ranking
 
 ---
-
-## 📄 License
-
-Educational project — University thesis (CaliforniaCFO, 2026).
