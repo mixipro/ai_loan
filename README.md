@@ -35,7 +35,7 @@ ai_loan/
 │   ├── models/               # Pydantic models
 │   ├── rag/                  # FAISS + sentence-transformers
 │   └── services/             # LLM service, orchestrator
-├── evals/                       
+├── evals/                    # Evaluation scripts, benchmarks, and AI output validation
 │   ├──results
 ├── frontend-react/           # ⭐ Modern React frontend
 │   ├── src/
@@ -46,7 +46,7 @@ ai_loan/
 │   │   └── types/
 │   ├── package.json
 │   └── vite.config.ts
-│── logs/
+│── logs/                     # LLM logs
 ├── Makefile                  # Unified entry point
 ├── pyproject.toml            # Python deps (uv)
 └── README.md
